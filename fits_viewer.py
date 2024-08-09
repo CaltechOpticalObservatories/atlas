@@ -11,82 +11,33 @@
 import os
 import sys
 
-# Third-Party Library Imports
-import numpy as np
-from astropy.io import  fits
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QSlider, QTextEdit, QMessageBox
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import Qt, QSize
+from fits_viewer_ui import FITSViewerUI
 
-class FITSViewer(QMainWindow):
+# Third-Party Library Imports
+from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QTextEdit, QFileDialog, QWidget, QSplitter
+
+from PyQt5.QtGui import QPixmap, QImage
+from astropy.io import fits
+import numpy as np
+
+class FITSViewer(FITSViewerUI):
     """
-    A PyQt5-based GUI application for viewing FITS images.
-    """
+    Handles image processing and FITS file operations for the FITS Viewer application.
+    """    
     def __init__(self):
         super().__init__()
+        self.match_mode = False
+        self.cached_images = [None, None]
+        self.cached_headers = [None, None]
+        self.setup_connections()
 
-        # Initialize
-        self.image_data = None
-        self.original_image = None
-        self.image_paths = []
-        self.current_image_index = 0
-
-        # Set up the UI
-        self.setup_ui()
-
-        # Initialize header_info
-        self.header_info = None 
-
-    def setup_ui(self):
-        """
-        Sets up the user interface of the FITSViewer.
-        """
-        # Set up the window
-        self.setWindowTitle("FITS Image Viewer")
-        self.setGeometry(100, 100, 1000, 1000)  # Default size
-
-        # Set up the central widget and layout
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.main_layout = QVBoxLayout()
-        self.central_widget.setLayout(self.main_layout)
-
-        # Create a horizontal layout for the buttons
-        self.button_layout = QHBoxLayout()
-
-        # Create and add buttons to the horizontal layout
-        self.open_file_button = QPushButton("Open FITS Image")
+    def setup_connections(self):
+        # Connect buttons to their respective functions
         self.open_file_button.clicked.connect(self.open_fits_image)
-        self.button_layout.addWidget(self.open_file_button)
-
-        self.open_directory_button = QPushButton("Open Directory of FITS Images")
         self.open_directory_button.clicked.connect(self.open_fits_directory)
-        self.button_layout.addWidget(self.open_directory_button)
-
-        # Add the button layout to the main layout
-        self.main_layout.addLayout(self.button_layout)
-
-        # Create and add the image label and slider
-        self.image_label = QLabel()
-        self.main_layout.addWidget(self.image_label)
-
-        self.slider = QSlider(Qt.Horizontal)
-        self.slider.setMinimum(0)
-        self.slider.setMaximum(100)
-        self.slider.setValue(50)  # Default value for contrast
-        self.slider.setTickInterval(10)
-        self.slider.setTickPosition(QSlider.TicksBelow)
-        self.slider.valueChanged.connect(self.adjust_contrast)
-        self.main_layout.addWidget(self.slider)
-
-        # Create and add the FITS header button and text area
-        self.header_button = QPushButton("View FITS Header")
+        self.match_mode_button.toggled.connect(self.toggle_match_mode)
         self.header_button.clicked.connect(self.show_fits_header)
-        self.button_layout.addWidget(self.header_button)
-
-        self.header_text_area = QTextEdit()
-        self.header_text_area.setReadOnly(True)
-        self.main_layout.addWidget(self.header_text_area)
+        self.slider.valueChanged.connect(self.adjust_contrast)
 
     def open_fits_image(self):
         """
@@ -119,9 +70,8 @@ class FITSViewer(QMainWindow):
 
     def display_fits_image(self, file_name):
         """
-        Displays the FITS image from the specified file.
+        Displays the FITS image from the specified file. Supports grayscale, RGB, and RGBA images.
         """
-        # Open the FITS file
         with fits.open(file_name) as hdul:
             self.image_data = hdul[0].data
             self.header_info = hdul[0].header
@@ -129,71 +79,113 @@ class FITSViewer(QMainWindow):
         if self.image_data is None:
             print("No data found in the FITS file.")
             return
+        
+        if self.header_info is not None:
+          header_text = "\n".join([f"{key}: {self.header_info[key]}" for key in self.header_info])
+          self.header_info = header_text
 
-        # Convert the FITS image data to a format suitable for QImage
-        # Handle single-band grayscale image
         if self.image_data.ndim == 2:
-            # Scale to 0-255 and Convert to Unsigned 8-bit Integer
-            self.original_image = np.uint8((self.image_data - np.min(self.image_data)) / np.ptp(self.image_data) * 255)
-            self.update_image(self.original_image)
+            self.original_image = self.normalize_image(self.image_data)
+            q_image = self.convert_to_qimage(self.original_image)
+            pixmap = QPixmap.fromImage(q_image)
+            self.display_image(pixmap)
 
-    def update_image(self, image_data):
-        """
-        Converts the numpy array image data to QImage and updates the displayed image.
-        """
-        # Convert image data to QImage and display it
-        height, width = image_data.shape
-        q_image = QImage(image_data.data, width, height, width, QImage.Format_Grayscale8)
-        pixmap = QPixmap.fromImage(q_image)
+        elif self.image_data.ndim == 3 and self.image_data.shape[2] in [3, 4]:
+            q_image = self.convert_to_qimage(self.image_data)
+            pixmap = QPixmap.fromImage(q_image)
+            self.display_image(pixmap)
 
-        # Calculate scaling to ensure image fills default size if smaller
-        default_size = QSize(1000, 1000)
-        pixmap_size = pixmap.size()
-
-        # checks if the dimensions of the pixmap are smaller than the default size
-        # if true, scales the pixmap up to the default size
-        if pixmap_size.width() < default_size.width() or pixmap_size.height() < default_size.height():
-            scaled_pixmap = pixmap.scaled(default_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        elif self.image_data.ndim == 3:
+            print("Multispectral image detected. Displaying the first band.")
+            self.original_image = self.normalize_image(self.image_data[:, :, 0])
+            q_image = self.convert_to_qimage(self.original_image)
+            pixmap = QPixmap.fromImage(q_image)
+            self.display_image(pixmap)
         else:
-            scaled_pixmap = pixmap
+          print("Unsupported image format.")
 
-        self.image_label.setPixmap(scaled_pixmap)
+    def display_image(self, pixmap):
+        """
+        Displays the image based on whether match mode is enabled or not.
+        """
+        max_width, max_height = 1000, 1000
+        
+        # Calculate the scaling factors
+        scaled_pixmap = self.scale_pixmap(pixmap, max_width, max_height)
 
-        # Adjust the window size based on the scaled image size, with a maximum size limit
-        max_size = 4000
+        if not self.match_mode:
+          # Single image mode
+          self.image_label1.setPixmap(scaled_pixmap)
+          self.image_label2.setPixmap(QPixmap())  # Clear the second label
+          self.resize(scaled_pixmap.size())
+          self.cached_headers[0] = self.header_info
 
-        new_width = min(scaled_pixmap.width(), max_size)
-        new_height = min(scaled_pixmap.height(), max_size)
+        else:
+          # Match mode
+          if self.cached_images[0] is None:
+              # Cache the first image
+              self.cached_images[0] = scaled_pixmap
+              self.image_label1.setPixmap(self.cached_images[0])
+              self.cached_headers[0] = self.header_info
+          elif self.cached_images[1] is None:
+              # Cache the second image
+              self.cached_images[1] = scaled_pixmap
+              self.image_label2.setPixmap(self.cached_images[1])
+              self.cached_headers[1] = self.header_info
+          else:
+              # Both images are cached, shift the images
+              self.cached_images[0] = self.cached_images[1]  # Move the second image to the first slot
+              self.cached_headers[0] = self.cached_headers[1]
+              self.cached_images[1] = scaled_pixmap  # Add the new image as the second image
+              self.cached_headers[1] = self.header_info
 
-        self.resize(new_width, new_height)
+              # Display the updated images
+              self.image_label1.setPixmap(self.scale_pixmap(self.cached_images[0], max_width, max_height))
+              self.image_label2.setPixmap(self.scale_pixmap(self.cached_images[1], max_width, max_height))
 
-    def adjust_contrast(self):
-        if self.original_image is not None:
-            # Get the contrast value from the slider
-            contrast = self.slider.value() / 50.0  # Scale factor, default is 1.0
+          # Adjust the layout based on match mode
+          self.adjust_layout_for_match_mode()
 
-            # Adjust the contrast
-            min_val = np.min(self.original_image)
-            adjusted_image = np.clip(min_val + (self.original_image - min_val) * contrast, 0, 255).astype(np.uint8)
+    def normalize_image(self, image_data):
+        """
+        Normalizes the image data to a 0-255 range for display purposes.
+        """
+        return np.uint8((image_data - np.min(image_data)) / np.ptp(image_data) * 255)
 
-            # Update the image with adjusted contrast
-            self.update_image(adjusted_image)
+    def convert_to_qimage(self, image_data):
+        """
+        Converts RGB or RGBA image data to a QImage for display.
+        """
+        if image_data.ndim == 2:
+          # Grayscale image
+          height, width = image_data.shape
+          q_image = QImage(image_data.data, width, height, width, QImage.Format_Grayscale8)
+        elif image_data.ndim == 3:
+          # RGB or RGBA image
+          height, width, channels = image_data.shape
+          bytes_per_line = channels * width
+          if channels == 3:
+              q_image = QImage(image_data.data, width, height, bytes_per_line, QImage.Format_RGB888)
+          elif channels == 4:
+              q_image = QImage(image_data.data, width, height, bytes_per_line, QImage.Format_RGBA8888)
+          else:
+              raise ValueError("Unsupported number of channels in image data.")
+        else:
+          raise ValueError("Unsupported image dimensions.")
+
+        return q_image
 
     def show_fits_header(self):
         """
-        Displays the FITS header information in the text area. 
+        Displays the FITS header information in the header text areas.
+        If match mode is enabled, it shows the headers for both images.
+        If no images are present, prompts the user to open an image.
         """
-        if self.header_info is not None:
-            header_text = "\n".join([f"{key}: {self.header_info[key]}" for key in self.header_info])
-            self.header_text_area.setText(header_text)
+        if self.match_mode:
+            # Update the header text areas for match mode
+            self.header_text_area1.setText(self.cached_headers[0])
+            self.header_text_area2.setText(self.cached_headers[1])
         else:
-            # Prompt user to open a FITS file if no header info is available
-            reply = QMessageBox.question(self, 'No Image Loaded', 'No FITS image is currently loaded. Do you want to open a FITS file?', QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-            if reply == QMessageBox.Yes:
-                self.open_fits_image()
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    viewer = FITSViewer()
-    viewer.show()
-    sys.exit(app.exec_())
+            # Show the header for the single image mode
+            print(self.cached_headers[0])
+            self.header_text_area1.setText(self.cached_headers[0])
