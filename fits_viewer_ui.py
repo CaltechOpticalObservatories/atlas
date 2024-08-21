@@ -8,7 +8,7 @@
 # pylint: disable=line-too-long
 
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QTextEdit, 
-                             QSplitter, QSlider, QAction, QFileDialog, QMenuBar, QPushButton, QTabWidget)
+                             QSplitter, QSlider, QAction, QFileDialog, QMenuBar, QPushButton, QTabWidget, QDesktopWidget)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage
 
@@ -26,6 +26,14 @@ class FITSViewerUI(QMainWindow):
         """
         self.setWindowTitle("FITS Image Viewer")
         self.setGeometry(100, 100, 1200, 1000)
+        # Get screen size and calculate proportional size
+        screen_size = QDesktopWidget().screenGeometry()
+        screen_width = screen_size.width()
+        screen_height = screen_size.height()
+
+        # Set window size to be 80% of the screen size
+        self.setFixedSize(int(screen_width * 0.8), int(screen_height * 0.8))
+
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -61,8 +69,7 @@ class FITSViewerUI(QMainWindow):
         """
         Creates and configures the image splitter and its components.
         """
-        self.splitter = QSplitter(Qt.Vertical)
-        self.splitter.setVisible(True)
+        self.splitter = QSplitter(Qt.Horizontal)
         self.image_tab_layout.addWidget(self.splitter)
 
         self.create_image_layout()
@@ -80,25 +87,33 @@ class FITSViewerUI(QMainWindow):
         """
         Creates and configures the layout for images.
         """
+        screen_size = QDesktopWidget().screenGeometry()
+        screen_width = screen_size.width()
+        screen_height = screen_size.height()
         self.image_layout = QVBoxLayout()
-        self.image_labels_layout = QHBoxLayout()
         self.image_label1 = QLabel()
+        self.image_label1.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
         self.image_label2 = QLabel()
-        self.image_labels_layout.addWidget(self.image_label1)
-        self.image_labels_layout.addWidget(self.image_label2)
+        self.image_label2.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
 
-        self.image_layout.addLayout(self.image_labels_layout)
+        self.image_layout.addWidget(self.image_label1)
+        self.image_layout.addWidget(self.image_label2)
 
     def create_result_image_widget(self):
         """
         Creates and configures the result image widget.
         """
         self.result_label = QLabel()
-        self.result_label.setFixedSize(1000, 500)
+        screen_size = QDesktopWidget().screenGeometry()
+        screen_width = screen_size.width()
+        screen_height = screen_size.height()
+
+        # Set window size to be 80% of the screen size
+        self.result_label.setFixedSize(int(screen_width * 0.4), int(screen_height * 0.4))
         self.result_label.setAlignment(Qt.AlignCenter)
 
         self.result_image_widget = QWidget()
-        self.result_image_widget.setStyleSheet("background-color: #E5E4E2;")
+        # self.result_image_widget.setStyleSheet("background-color: #E5E4E2;")
         self.result_image_layout = QVBoxLayout()
         self.result_image_layout.setAlignment(Qt.AlignCenter)
         self.result_image_widget.setLayout(self.result_image_layout)
@@ -154,7 +169,10 @@ class FITSViewerUI(QMainWindow):
         """
         self.menu_bar = self.menuBar()
         self.create_file_menu()
+        self.create_connect_menu()
         self.create_tools_menu()
+        self.create_view_menu()
+        self.create_reset_button()
 
     def create_file_menu(self):
         """
@@ -170,6 +188,20 @@ class FITSViewerUI(QMainWindow):
         self.open_directory_action.triggered.connect(self.open_fits_directory)
         self.file_menu.addAction(self.open_directory_action)
 
+        self.reset_action = QAction("Reset", self)
+        self.reset_action.triggered.connect(self.reset)
+        self.file_menu.addAction(self.reset_action)
+
+    def create_connect_menu(self):
+        """
+        Creates and configures the Connect menu with Redis option.
+        """
+        self.connect_menu = self.menu_bar.addMenu("Connect")
+
+        self.connect_redis_action = QAction("Connect to Redis", self)
+        self.connect_redis_action.triggered.connect(self.connect_to_redis)
+        self.connect_menu.addAction(self.connect_redis_action)
+
     def create_tools_menu(self):
         """
         Creates and configures the Tools menu.
@@ -183,12 +215,31 @@ class FITSViewerUI(QMainWindow):
 
         self.subtract_signal_action = QAction("Subtract Signal", self)
         self.subtract_signal_action.triggered.connect(self.subtract_from_images)
+        self.subtract_signal_action.setCheckable(True)
         self.tools_menu.addAction(self.subtract_signal_action)
 
         self.show_header_action = QAction("Show Header", self)
         self.show_header_action.triggered.connect(self.show_header_tab)
         self.tools_menu.addAction(self.show_header_action)
 
+    def create_view_menu(self):
+        """
+        Creates and configures the View menu.
+        """
+        self.view_menu = self.menu_bar.addMenu("View")
+        self.view_options_action = QAction("View Options", self)
+        self.view_options_action.triggered.connect(self.view_options)
+        self.view_menu.addAction(self.view_options_action)
+        
+    
+    def create_reset_button(self):
+        """
+        Creates and configures the reset button on the menu bar.
+        """
+        self.reset_action = QAction("Reset", self)
+        self.reset_action.triggered.connect(self.reset)
+        self.menu_bar.addAction(self.reset_action)
+    
     def toggle_header_visibility(self):
         """
         Toggles the visibility of the header section.
@@ -215,13 +266,16 @@ class FITSViewerUI(QMainWindow):
         """
         self.tab_widget.setCurrentWidget(self.header_tab)
 
-    def open_fits_image(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open FITS File", "", "FITS Files (*.fits)")
-        if file_name:
-            self.open_fits_image(file_name)
 
-    def open_fits_directory(self):
-        directory = QFileDialog.getExistingDirectory(self, "Open Directory")
-        if directory:
-            self.open_fits_directory(directory)
+    def connect_to_redis(self):
+        """
+        Handles the connection to Redis.
+        """
+        print("Connecting to Redis...")  # Replace with actual Redis connection logic
+
+    def view_options(self):
+        """
+        Handles the view options.
+        """
+        print("Opening view options...")  # Replace with actual view options logic
 

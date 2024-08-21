@@ -10,13 +10,14 @@
 # Standard Library Imports
 import os
 import sys
+import glob
 
 from fits_viewer_ui import FITSViewerUI
 from image_utils import normalize_image, convert_to_qimage
 
 # Third-Party Library Imports
-from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QTextEdit, QFileDialog, QWidget, QSplitter
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QTextEdit, QFileDialog, QDesktopWidget
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QImage
 from astropy.io import fits
 import numpy as np
@@ -33,11 +34,11 @@ class FITSViewer(FITSViewerUI):
         self.original_image = None
         self.signal_image = None
         self.reset_image = None
+        self.update_subtraction = False
+        self.image_dir = None
         self.setup_connections()
 
     def setup_connections(self):
-        self.open_file_action.triggered.connect(self.open_fits_image)
-        self.open_directory_action.triggered.connect(self.open_fits_directory)
         self.match_mode_action.toggled.connect(self.toggle_match_mode)
         self.show_header_action.triggered.connect(self.show_header_tab)
         self.slider.valueChanged.connect(self.adjust_contrast)
@@ -55,13 +56,45 @@ class FITSViewer(FITSViewerUI):
     def open_fits_directory(self):
         """
         Opens a directory selection dialog, retrieves the paths of all FITS files in the selected directory,
-        and displays the first FITS image from the list of retrieved files.
+        and initializes directory monitoring.
         """
-        directory = QFileDialog.getExistingDirectory(self, "Open Directory")
-        if directory:
-            self.image_paths = [os.path.join(directory, f) for f in os.listdir(directory) if f.lower().endswith('.fits')]
-            self.current_image_index = 0
-            if self.image_paths:
+        self.image_dir = QFileDialog.getExistingDirectory(self, "Open Directory")
+        if self.image_dir:
+            self.update_images_in_directory()
+
+    def check_for_new_images(self):
+        """
+        Periodically checks the directory for new FITS images and updates the display.
+        """
+        if self.image_dir:
+            self.update_images_in_directory()
+
+    def update_images_in_directory(self):
+        """
+        Retrieves the paths of all FITS files in the directory, updates the image sequence,
+        and displays the most recent images.
+        """
+        if not self.image_dir:
+            return
+
+        # Get all FITS files in the directory, sorted by modification time (most recent last)
+        file_paths = [os.path.join(self.image_dir, f) for f in os.listdir(self.image_dir) if f.lower().endswith('.fits')]
+        file_paths.sort(key=os.path.getmtime)  # Sort by modification time
+        if self.match_mode:
+            # Handle the most recent two FITS images
+            if len(file_paths) >= 2:
+                self.image_paths = file_paths[-2:]  # Take the two most recent files
+                self.current_image_index = 0
+                # Display images in match mode
+                for i in range(len(self.image_paths)):
+                    self.display_fits_image(self.image_paths[i])
+            else:
+                print("Not enough images in the directory for match mode.")
+        else:
+            # Handle single image display when not in match mode
+            if file_paths:
+                self.image_paths = [file_paths[-1]]  # Take the most recent file
+                self.current_image_index = 0
                 self.display_fits_image(self.image_paths[self.current_image_index])
 
     def display_fits_image(self, file_name):
@@ -115,22 +148,17 @@ class FITSViewer(FITSViewerUI):
         # Convert QImage to QPixmap and display
         pixmap = QPixmap.fromImage(q_image)
 
-        # Center and scale result image if displayed
-        if self.result_label.pixmap():
-            result_pixmap = pixmap.scaled(self.result_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.result_label.setPixmap(result_pixmap)
-
     def update_result_label_size(self):
         """
         Adjust result_label to match the size of image_label1 and image_label2
         """
-        if self.image_label1.pixmap():
-            size = self.image_label1.pixmap().size()
-            self.result_label.setFixedSize(size)
-            self.result_label.setPixmap(self.result_label.pixmap().scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        else:
-            # Default size if image_label1 has no pixmap
-            self.result_label.setFixedSize(1000, 500)  # or any default size you prefer
+        #if self.image_label1.pixmap():
+        size = self.image_label1.pixmap().size()
+        self.result_label.setFixedSize(size)
+        self.result_label.setPixmap(self.result_label.pixmap().scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        # else:
+        #     # Default size if image_label1 has no pixmap
+        #     self.result_label.setFixedSize(1000, 500)  # or any default size you prefer
 
     def display_image(self, pixmap):
         """
@@ -141,26 +169,37 @@ class FITSViewer(FITSViewerUI):
         Args:
             pixmap (QPixmap): The QPixmap object containing the image to be displayed.
         """
-        max_width, max_height = 1000, 1000
+        screen = QDesktopWidget().screenGeometry()
+        max_width, max_height = screen.width() - 100, screen.height() - 100  # Adjust margins if needed
+
+        # max_width, max_height = 1000, 1000
         scaled_pixmap = self.scale_pixmap(pixmap, max_width, max_height)
 
         if not self.match_mode:
-            self.image_label1.setPixmap(scaled_pixmap)
+            self.cached_images[0] = pixmap
             self.image_label2.setPixmap(QPixmap())  # Clear the second label
-            self.resize(scaled_pixmap.size())
+            self.image_label1.setPixmap(self.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
         else:
             if self.cached_images[0] is None:
                 self.cached_images[0] = pixmap
-                self.image_label1.setPixmap(self.scale_pixmap(self.cached_images[0], max_width, max_height))
+                self.image_label1.setPixmap(self.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                #self.image_label1.setPixmap(self.scale_pixmap(self.cached_images[0], max_width, max_height))
             elif self.cached_images[1] is None:
                 self.cached_images[1] = pixmap
-                self.image_label2.setPixmap(self.scale_pixmap(self.cached_images[1], max_width, max_height))
+                #self.image_label2.setPixmap(self.scale_pixmap(self.cached_images[1], max_width, max_height))
+                self.image_label2.setPixmap(self.cached_images[1].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                if self.update_subtraction:
+                    self.subtract_from_images()
             else:
                 self.cached_images[0] = self.cached_images[1]
                 self.cached_images[1] = pixmap
 
-                self.image_label1.setPixmap(self.scale_pixmap(self.cached_images[0], max_width, max_height))
-                self.image_label2.setPixmap(self.scale_pixmap(self.cached_images[1], max_width, max_height))
+                self.image_label1.setPixmap(self.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                self.image_label2.setPixmap(self.cached_images[1].scaled(self.image_label2.size(), Qt.KeepAspectRatio))
+                
+                if self.update_subtraction:
+                    self.subtract_from_images()
+
 
         self.show_headers()
         self.adjust_layout_for_match_mode()
@@ -216,9 +255,9 @@ class FITSViewer(FITSViewerUI):
             self.header_label2.setVisible(True)
             self.header_text_area2.setVisible(True)
             
-            # Update the result image to match the size of image_label1 and image_label2
-            self.update_result_label_size()
-            if self.result_label.pixmap():
+            if self.result_label.pixmap():            
+                # Update the result image to match the size of image_label1 and image_label2
+                self.update_result_label_size()
                 result_pixmap = self.result_label.pixmap().scaled(self.result_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.result_label.setPixmap(result_pixmap)
 
@@ -226,6 +265,7 @@ class FITSViewer(FITSViewerUI):
             self.splitter.setVisible(False)
             self.header_label2.setVisible(False)
             self.header_text_area2.setVisible(False)
+            self.update_subtraction = False
 
     def show_header_tab(self):
         """
@@ -399,7 +439,7 @@ class FITSViewer(FITSViewerUI):
             num_taps (int): Number of tap segments to process.
         """
         # Extract the QImage from the cached pixmaps
-        image2_data = self.get_fits_image_data(self.cached_images[0])
+        image2_data = self.get_fits_image_data(self.cached_images[1])
 
         # Check if the data is 2D
         if len(image2_data.shape) == 2:
@@ -439,3 +479,21 @@ class FITSViewer(FITSViewerUI):
                 print(f"Error: The width of the FITS image ({width}) does not match {tap_width} pixels per tap with {num_taps} taps.")
         else:
             print("The FITS file does not contain a 2D image. Please check the dimensionality.")
+
+
+    def reset(self):
+        # Clear all images and reset paths
+        self.image_label1.clear()
+        self.image_label2.clear()
+        self.result_label.clear()
+
+        # Reset paths
+        # self.match_mode = False
+        self.cached_images = [None, None]
+        self.cached_headers = [None, None]
+        self.original_image = None
+        self.signal_image = None
+        self.reset_image = None
+
+        # Optionally reset other elements here, e.g., text fields, selections, etc.
+        print("UI has been reset.")
