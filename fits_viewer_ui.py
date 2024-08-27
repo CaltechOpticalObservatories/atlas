@@ -9,7 +9,7 @@
 
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QTextEdit, 
                              QSplitter, QSlider, QAction, QFileDialog, QMenuBar, QPushButton, QTabWidget, QDesktopWidget)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSizeF, QRectF
 from PyQt5.QtGui import QPixmap, QImage
 
 class FITSViewerUI(QMainWindow):
@@ -33,7 +33,6 @@ class FITSViewerUI(QMainWindow):
 
         # Set window size to be 80% of the screen size
         self.setFixedSize(int(screen_width * 0.8), int(screen_height * 0.8))
-
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -95,9 +94,16 @@ class FITSViewerUI(QMainWindow):
         self.image_label1.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
         self.image_label2 = QLabel()
         self.image_label2.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
+        self.image_label1.setMouseTracking(True)
+        self.image_label1.installEventFilter(self)
+        self.image_label2.setMouseTracking(True)
+        self.image_label2.installEventFilter(self)
 
         self.image_layout.addWidget(self.image_label1)
         self.image_layout.addWidget(self.image_label2)
+
+        # Install event filter
+        self.image_label1.installEventFilter(self)
 
     def create_result_image_widget(self):
         """
@@ -111,6 +117,8 @@ class FITSViewerUI(QMainWindow):
         # Set window size to be 80% of the screen size
         self.result_label.setFixedSize(int(screen_width * 0.4), int(screen_height * 0.4))
         self.result_label.setAlignment(Qt.AlignCenter)
+        self.result_label.setMouseTracking(True)
+        self.result_label.installEventFilter(self)
 
         self.result_image_widget = QWidget()
         # self.result_image_widget.setStyleSheet("background-color: #E5E4E2;")
@@ -230,8 +238,23 @@ class FITSViewerUI(QMainWindow):
         self.view_options_action = QAction("View Options", self)
         self.view_options_action.triggered.connect(self.view_options)
         self.view_menu.addAction(self.view_options_action)
+
+        # Add action to toggle viewfinder
+        self.viewfinder_action = QAction("Show Viewfinder", self, checkable=True)
+        self.viewfinder_action.triggered.connect(self.toggle_viewfinder)
+        self.view_menu.addAction(self.viewfinder_action)
         
-    
+    def toggle_viewfinder(self):
+        """
+        Toggles the visibility of the viewfinder popup.
+        """
+        if self.viewfinder_action.isChecked():
+            self.viewfinder_popup.show()
+            self.viewfinder_visible = True
+        else:
+            self.viewfinder_popup.hide()
+            self.viewfinder_visible = False
+
     def create_reset_button(self):
         """
         Creates and configures the reset button on the menu bar.

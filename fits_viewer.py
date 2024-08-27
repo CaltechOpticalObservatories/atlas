@@ -14,10 +14,11 @@ import glob
 
 from fits_viewer_ui import FITSViewerUI
 from image_utils import normalize_image, convert_to_qimage
+from viewfinder import ViewfinderPopup
 
 # Third-Party Library Imports
 from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QTextEdit, QFileDialog, QDesktopWidget
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QEvent, QRect
 from PyQt5.QtGui import QPixmap, QImage
 from astropy.io import fits
 import numpy as np
@@ -27,11 +28,17 @@ class FITSViewer(FITSViewerUI):
     Handles image processing and FITS file operations for the FITS Viewer application.
     """
     def __init__(self):
+
+        # Initialize viewfinder popup
+        self.viewfinder_popup = ViewfinderPopup()
+        self.mouse_pos = None
+
         super().__init__()
         self.match_mode = False
         self.cached_images = [None, None]
         self.cached_headers = [None, None]
         self.original_image = None
+        self.result_image = None
         self.signal_image = None
         self.reset_image = None
         self.update_subtraction = False
@@ -43,6 +50,9 @@ class FITSViewer(FITSViewerUI):
         self.show_header_action.triggered.connect(self.show_header_tab)
         self.slider.valueChanged.connect(self.adjust_contrast)
         self.subtract_signal_action.triggered.connect(self.subtract_from_images)
+
+        # Add a connection to open the viewfinder popup
+        self.viewfinder_action.triggered.connect(self.open_viewfinder_popup)
 
     def open_fits_image(self):
         """
@@ -368,8 +378,8 @@ class FITSViewer(FITSViewerUI):
                     result_array[:, start_col:end_col] = result_part
 
             # Convert result to QImage
-            result_image = QImage(result_array.data, result_array.shape[1], result_array.shape[0], result_array.strides[0], QImage.Format_Grayscale16)
-            result_pixmap = QPixmap.fromImage(result_image)
+            self.result_image = QImage(result_array.data, result_array.shape[1], result_array.shape[0], result_array.strides[0], QImage.Format_Grayscale16)
+            result_pixmap = QPixmap.fromImage(self.result_image)
 
             # Display images
             self.image_label1.setPixmap(self.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
@@ -480,8 +490,10 @@ class FITSViewer(FITSViewerUI):
         else:
             print("The FITS file does not contain a 2D image. Please check the dimensionality.")
 
-
     def reset(self):
+        """
+        Resets the user interface and internal state of the application.
+        """
         # Clear all images and reset paths
         self.image_label1.clear()
         self.image_label2.clear()
@@ -497,3 +509,106 @@ class FITSViewer(FITSViewerUI):
 
         # Optionally reset other elements here, e.g., text fields, selections, etc.
         print("UI has been reset.")
+
+    def open_viewfinder_popup(self):
+        """
+        Opens the viewfinder popup and sets the pixmaps for the images.
+        """
+        # Ensure cached_images and reset_image are not None
+        if (self.cached_images[0] is not None and
+            self.cached_images[1] is not None and
+            self is not None):
+            
+            # Convert QPixmap to QPixmap objects for the popup
+            image1_pixmap = self.cached_images[0]
+            image2_pixmap = self.cached_images[1]
+            result_pixmap = QPixmap.fromImage(self.result_image)
+            
+            # Set the images in the popup
+            self.viewfinder_popup.set_pixmaps(image1_pixmap, image2_pixmap, result_pixmap)
+            
+            # Show the popup
+            self.viewfinder_popup.exec_()
+        else:
+            print("Not enough images to display in the viewfinder popup.")
+
+    def eventFilter(self, obj, event):
+        """
+        Filters events to handle mouse movements over specific image labels.
+        Parameters:
+        - obj (QObject): The object that the event is associated with. This is typically one of 
+                     the image labels (e.g., `self.image_label1`, `self.image_label2`, 
+                     or `self.result_label`).
+        - event (QEvent): The event object containing information about the event. Specifically,
+                       this method checks if the event type is `QEvent.MouseMove`.
+        """
+        # Check if the event is a mouse move event
+        if event.type() == QEvent.MouseMove:
+            if obj == self.image_label1:
+                if self.cached_images[0]:
+                    self.mouse_pos = event.pos()
+                    self.current_label = 1
+                    self.update_viewfinder()
+            elif obj == self.image_label2:
+                if self.cached_images[1]:
+                    self.mouse_pos = event.pos()
+                    self.current_label = 2
+                    self.update_viewfinder()
+            elif obj == self.result_label:
+                if self.reset_image is not None:
+                    self.mouse_pos = event.pos()
+                    self.current_label = 3
+                    self.update_viewfinder()
+        
+        # Return False to ensure other event filters are still processed
+        return super().eventFilter(obj, event)
+
+    def update_viewfinder(self):
+        """
+        Updates the viewfinder popup with a cropped region of the image based on the mouse position.
+
+        The method determines which image to use based on the current label and scales the image to fit
+        the label size. The viewfinder is updated only if a valid image is available and the mouse position is set.
+        """
+        if self.mouse_pos:
+            # Determine which image to use based on the current label
+            if self.current_label == 1:
+                image_pixmap = self.cached_images[0] if self.cached_images[0] else None
+            elif self.current_label == 2:
+                image_pixmap = self.cached_images[1] if self.cached_images[1] else None
+            elif self.current_label == 3:
+                image_pixmap = QPixmap.fromImage(self.result_image) if self.result_image else None
+            else:
+                # No valid image is set, exit the method
+                return
+
+            # Convert mouse position to the corresponding region in the image
+            pixmap_size = image_pixmap.size()
+            # Choose the appropriate size based on the current label
+            scaled_size = self.image_label1.size() if self.current_label in (1, 2) else self.result_label.size()
+            # Scale the image to match the label size
+            scaled_pixmap = image_pixmap.scaled(scaled_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            
+            # Calculate the scale factors based on the image and label sizes
+            scale_x = scaled_size.width() / pixmap_size.width()
+            scale_y = scaled_size.height() / pixmap_size.height()
+            # Calculate the position of the viewfinder area in the image
+            viewfinder_x = int(self.mouse_pos.x() * scale_x)
+            viewfinder_y = int(self.mouse_pos.y() * scale_y)
+
+            # Define the size of the viewfinder area
+            viewfinder_size = QSize(200, 200)
+            # Create a rectangle around the mouse position to show in the viewfinder
+            rect = QRect(viewfinder_x - viewfinder_size.width() // 2, 
+                        viewfinder_y - viewfinder_size.height() // 2, 
+                        viewfinder_size.width(), 
+                        viewfinder_size.height())
+            
+            # Ensure the rectangle stays within the bounds of the image
+            rect = rect.intersected(QRect(0, 0, pixmap_size.width(), pixmap_size.height()))
+
+            # Crop the region from the image based on the calculated rectangle
+            cropped_pixmap = image_pixmap.copy(rect)
+            
+            # Update the viewfinder popup with the cropped pixmap
+            self.viewfinder_popup.set_image(cropped_pixmap)
