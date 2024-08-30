@@ -1,8 +1,15 @@
+# -----------------------------------------------------------------------------
+# @file     histogram.py
+# @brief    A class for displaying histograms of images with interactive bin count adjustment and image navigation.
+# @author   Prakriti Gupta <pgupta@astro.caltech.edu>
+# -----------------------------------------------------------------------------
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QSlider, QLabel, QPushButton, QHBoxLayout
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage
 
 class Histogram(QDialog):
     """
@@ -86,13 +93,39 @@ class Histogram(QDialog):
     def pixmap_to_array(self, pixmap):
         """
         Converts a QPixmap to a numpy array.
+        Handles both monochrome (grayscale), RGB, RGBA, and multispectral images.
         """
+        # Convert QPixmap to QImage
         image = pixmap.toImage()
         width, height = image.width(), image.height()
+        
+        # Convert to numpy array
         ptr = image.bits()
-        ptr.setsize(height * width * 4)  # 4 bytes per pixel (RGBA)
-        arr = np.array(ptr).reshape((height, width, 4))  # RGBA image
-        return arr[:, :, 0]  # Use the red channel or convert to grayscale if needed
+        if image.format() == QImage.Format_Grayscale8:
+            # Monochrome image (8-bit grayscale)
+            ptr.setsize(width * height)  # 1 byte per pixel
+            arr = np.array(ptr).reshape((height, width))
+        else:
+            # RGB or RGBA image (8-bit per channel)
+            ptr.setsize(width * height * 4)  # 4 bytes per pixel (RGBA)
+            arr = np.array(ptr).reshape((height, width, 4))  # RGBA image
+
+            # Handle different formats
+            if image.format() == QImage.Format_RGB888:
+                arr = arr[:, :, :3]  # Extract RGB channels
+            elif image.format() == QImage.Format_RGBA8888:
+                arr = arr[:, :, :3]  # Use RGB channels only
+            else:
+                # Handle multispectral images
+                if arr.shape[2] > 3:
+                    # Multispectral image with more than 3 channels
+                    # You can choose how to handle this, e.g., extract specific bands or process all bands
+                    # For demonstration, we will use all bands
+                    pass
+                else:
+                    raise ValueError("Unsupported image format")
+
+        return arr
 
     def show_prev_image(self):
         """
