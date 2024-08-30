@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# @file     fits_viewer_ui.py
+# @file     viewfinder.py
 # @brief    A dialog window for displaying and selecting between different image views. 
 # @author   Prakriti Gupta <pgupta@astro.caltech.edu>
 # -----------------------------------------------------------------------------

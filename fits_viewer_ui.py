@@ -230,6 +230,10 @@ class FITSViewerUI(QMainWindow):
         self.show_header_action.triggered.connect(self.show_header_tab)
         self.tools_menu.addAction(self.show_header_action)
 
+        self.show_histogram_action = QAction("Histogram", self)
+        self.show_histogram_action.triggered.connect(self.show_histogram)
+        self.tools_menu.addAction(self.show_histogram_action)
+
     def create_view_menu(self):
         """
         Creates and configures the View menu.

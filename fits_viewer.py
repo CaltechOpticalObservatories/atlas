@@ -9,15 +9,14 @@
 
 # Standard Library Imports
 import os
-import sys
-import glob
 
 from fits_viewer_ui import FITSViewerUI
 from image_utils import normalize_image, convert_to_qimage
 from viewfinder import ViewfinderPopup
+from histogram import Histogram
 
 # Third-Party Library Imports
-from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QSlider, QTextEdit, QFileDialog, QDesktopWidget
+from PyQt5.QtWidgets import QFileDialog, QDesktopWidget
 from PyQt5.QtCore import Qt, QSize, QEvent, QRect
 from PyQt5.QtGui import QPixmap, QImage
 from astropy.io import fits
@@ -43,16 +42,6 @@ class FITSViewer(FITSViewerUI):
         self.reset_image = None
         self.update_subtraction = False
         self.image_dir = None
-        self.setup_connections()
-
-    def setup_connections(self):
-        self.match_mode_action.toggled.connect(self.toggle_match_mode)
-        self.show_header_action.triggered.connect(self.show_header_tab)
-        self.slider.valueChanged.connect(self.adjust_contrast)
-        self.subtract_signal_action.triggered.connect(self.subtract_from_images)
-
-        # Add a connection to open the viewfinder popup
-        self.viewfinder_action.triggered.connect(self.open_viewfinder_popup)
 
     def open_fits_image(self):
         """
@@ -162,13 +151,13 @@ class FITSViewer(FITSViewerUI):
         """
         Adjust result_label to match the size of image_label1 and image_label2
         """
-        #if self.image_label1.pixmap():
-        size = self.image_label1.pixmap().size()
-        self.result_label.setFixedSize(size)
-        self.result_label.setPixmap(self.result_label.pixmap().scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        # else:
-        #     # Default size if image_label1 has no pixmap
-        #     self.result_label.setFixedSize(1000, 500)  # or any default size you prefer
+        if self.image_label1.pixmap():
+            size = self.image_label1.pixmap().size()
+            self.result_label.setFixedSize(size)
+            self.result_label.setPixmap(self.result_label.pixmap().scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            # Default size if image_label1 has no pixmap
+            self.result_label.setFixedSize(1000, 500)  # or any default size you prefer
 
     def display_image(self, pixmap):
         """
@@ -612,3 +601,24 @@ class FITSViewer(FITSViewerUI):
             
             # Update the viewfinder popup with the cropped pixmap
             self.viewfinder_popup.set_image(cropped_pixmap)
+
+    def show_histogram(self):
+        """
+        Opens a histogram dialog for the cached images and result image.
+        """
+        if None in self.cached_images and self.result_image is None:
+            print("No images available for histogram.")
+            return
+
+        # Combine cached images and result image into one list
+        images_to_display = [img for img in self.cached_images if img is not None]
+        if self.result_image is not None:
+            images_to_display.append(QPixmap.fromImage(self.result_image))
+
+        if not images_to_display:
+            print("No valid images available for histogram.")
+            return
+
+        # Create and show the histogram dialog
+        histogram_dialog = Histogram(images_to_display, self)
+        histogram_dialog.exec_()
