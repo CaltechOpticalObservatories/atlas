@@ -317,10 +317,8 @@ class FITSViewer(QMainWindow):
             if self.fits_view_model.cached_images[0] is None:
                 self.fits_view_model.cached_images[0] = pixmap
                 self.image_label1.setPixmap(self.fits_view_model.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
-                #self.image_label1.setPixmap(self.scale_pixmap(self.cached_images[0], max_width, max_height))
             elif self.fits_view_model.cached_images[1] is None:
                 self.fits_view_model.cached_images[1] = pixmap
-                #self.image_label2.setPixmap(self.scale_pixmap(self.cached_images[1], max_width, max_height))
                 self.image_label2.setPixmap(self.fits_view_model.cached_images[1].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
                 if self.fits_view_model.update_subtraction:
                     self.fits_view_model.subtract_from_images()
@@ -398,7 +396,6 @@ class FITSViewer(QMainWindow):
             self.header_text_area2.setPlainText(self.fits_view_model.cached_headers[1])
         else:
             self.header_text_area2.setPlainText("No header information available for Image 2.")
-
 
     def toggle_match_mode(self, checked):
         """
