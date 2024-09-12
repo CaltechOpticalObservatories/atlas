@@ -10,7 +10,7 @@ from model.fits_model import FITSModel
 import os
 
 # Third-Party Library Imports
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QSize, QEvent, QRect
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap, QImage
 from astropy.io import fits
 import numpy as np
@@ -80,7 +80,7 @@ class FITSViewModel(QObject):
             self.image_data_changed.emit(pixmap)
         else:
             print("Unsupported image format.")
-            
+
         # Convert QImage to QPixmap and display
         pixmap = QPixmap.fromImage(q_image)
 
@@ -153,11 +153,11 @@ class FITSViewModel(QObject):
     def extract_tap_from_fits(self, image_data, tap_index):
         """
         Extracts a specific TAP from the FITS image data.
-        
+
         Parameters:
         - image_data: The image data array.
         - tap_index: Index of the TAP to extract.
-        
+
         Returns:
         - A 2D numpy array representing the specific TAP.
         """
@@ -177,7 +177,7 @@ class FITSViewModel(QObject):
         operation in a segmented manner to handle large images efficiently.
         """
         if self.cached_images[0] is not None and self.cached_images[1] is not None:
-            
+
             # If this is the first run, fetch the signal image from the first image
             self.create_signal_fits()
 
@@ -191,19 +191,18 @@ class FITSViewModel(QObject):
             result_array = np.zeros_like(image1_data, dtype=np.int16)
             for tap_index in range(32):
                 # Calculate column indices for the tap
-                    start_col = tap_index * 64
-                    end_col = start_col + 64
+                start_col = tap_index * 64
+                end_col = start_col + 64
 
-                    # Extract the specific tap from both images
-                    tap1 = image1_data[:, start_col:end_col]
-                    tap2 = image2_data[:, start_col:end_col]
+                # Extract the specific tap from both images
+                tap1 = image1_data[:, start_col:end_col]
+                tap2 = image2_data[:, start_col:end_col]
 
-                    # Subtract corresponding taps
-                    result_part = np.clip(tap2 -  tap1, -32768, 32767).astype(np.int16)
-                    # result_part = np.clip(tap2 - tap1, 0, 255).astype(np.int16)
+                # Subtract corresponding taps
+                result_part = np.clip(tap2 -  tap1, -32768, 32767).astype(np.int16)
 
-                    # Place the result into the corresponding section of the result_array
-                    result_array[:, start_col:end_col] = result_part
+                # Place the result into the corresponding section of the result_array
+                result_array[:, start_col:end_col] = result_part
 
             # Convert result to QImage
             self.result_image = QImage(result_array.data, result_array.shape[1], result_array.shape[0], result_array.strides[0], QImage.Format_Grayscale16)
