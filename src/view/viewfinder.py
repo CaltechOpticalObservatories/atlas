@@ -6,7 +6,6 @@
 
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import QSize
 
 class ViewfinderPopup(QDialog):
     """
