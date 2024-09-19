@@ -4,9 +4,10 @@
 # @author   Prakriti Gupta <pgupta@astro.caltech.edu>
 # -----------------------------------------------------------------------------
 
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QTextEdit, 
-                             QSplitter, QSlider, QAction, QFileDialog, QTabWidget, QDesktopWidget)
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QTextEdit,
+                             QSplitter, QSlider, QAction, QFileDialog, QTabWidget,
+                             QDesktopWidget, QSizePolicy)
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 import numpy as np
 
@@ -95,21 +96,58 @@ class FITSViewer(QMainWindow):
         screen_size = QDesktopWidget().screenGeometry()
         screen_width = screen_size.width()
         screen_height = screen_size.height()
+
         self.image_layout = QVBoxLayout()
+         # Set margins to zero
+        self.image_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Calculate font size based on screen width
+        font_size = int(screen_width * 0.01)
+
+        # Create labels for image names
+        self.image_name_label1 = QLabel("Image 1")
+        self.image_name_label2 = QLabel("Image 2")
+
+        # Set styles for the name labels
+        font = self.image_name_label1.font()
+        font.setBold(True)
+        font.setPointSize(font_size)
+
+        self.image_name_label1.setFont(font)
+        self.image_name_label2.setFont(font)
+
+        self.image_name_label1.setAlignment(Qt.AlignCenter)
+        self.image_name_label2.setAlignment(Qt.AlignCenter)
+
+        # Set margins and padding to zero
+        self.image_name_label1.setContentsMargins(0, 0, 0, 0)
+        self.image_name_label2.setContentsMargins(0, 0, 0, 0)
+
+        # Create image display labels
         self.image_label1 = QLabel()
         self.image_label1.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
         self.image_label2 = QLabel()
         self.image_label2.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
+        self.image_label1.setContentsMargins(0, 0, 0, 0)
+        self.image_label2.setContentsMargins(0, 0, 0, 0)
+        self.image_label1.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.image_label2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
         self.image_label1.setMouseTracking(True)
         self.image_label1.installEventFilter(self)
         self.image_label2.setMouseTracking(True)
         self.image_label2.installEventFilter(self)
 
+        # Add the name labels and image labels to the layout
+        self.image_layout.addWidget(self.image_name_label1)
         self.image_layout.addWidget(self.image_label1)
+        self.image_layout.addSpacing(10)
+        self.image_layout.addWidget(self.image_name_label2)
         self.image_layout.addWidget(self.image_label2)
 
         # Install event filter
         self.image_label1.installEventFilter(self)
+
 
     def create_result_image_widget(self):
         """
@@ -126,10 +164,22 @@ class FITSViewer(QMainWindow):
         self.result_label.setMouseTracking(True)
         self.result_label.installEventFilter(self)
 
+        # Create labels for image names
+        self.result_name_label = QLabel("Result Image")
+
+        # Set styles for the name labels
+        font = self.result_name_label.font()
+        font.setBold(True)
+        font_size = int(screen_width * 0.01)
+        font.setPointSize(font_size)
+
+        self.result_name_label.setFont(font)
+
         self.result_image_widget = QWidget()
         self.result_image_layout = QVBoxLayout()
         self.result_image_layout.setAlignment(Qt.AlignCenter)
         self.result_image_widget.setLayout(self.result_image_layout)
+        self.result_image_layout.addWidget(self.result_name_label)
         self.result_image_layout.addWidget(self.result_label)
 
     def create_contrast_slider(self):
