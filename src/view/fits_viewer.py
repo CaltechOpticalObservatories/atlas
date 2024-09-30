@@ -122,6 +122,8 @@ class FITSViewer(QMainWindow):
         # Set margins and padding to zero
         self.image_name_label1.setContentsMargins(0, 0, 0, 0)
         self.image_name_label2.setContentsMargins(0, 0, 0, 0)
+        self.image_name_label1.hide()
+        self.image_name_label2.hide()
 
         # Create image display labels
         self.image_label1 = QLabel()
@@ -174,6 +176,7 @@ class FITSViewer(QMainWindow):
         font.setPointSize(font_size)
 
         self.result_name_label.setFont(font)
+        self.result_name_label.hide()
 
         self.result_image_widget = QWidget()
         self.result_image_layout = QVBoxLayout()
@@ -277,7 +280,7 @@ class FITSViewer(QMainWindow):
         self.tools_menu.addAction(self.match_mode_action)
 
         self.subtract_signal_action = QAction("Subtract Signal", self)
-        self.subtract_signal_action.triggered.connect(self.fits_view_model.subtract_from_images)
+        self.subtract_signal_action.triggered.connect(self.toggle_subtract_mode)
         self.subtract_signal_action.setCheckable(True)
         self.tools_menu.addAction(self.subtract_signal_action)
 
@@ -311,9 +314,9 @@ class FITSViewer(QMainWindow):
         Opens a directory dialog to select a folder, retrieves all FITS file paths from that folder,
         and displays the first FITS image in the directory.
         """
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open FITS File", "", "FITS Files (*.fits)")
-        if file_name:
-            self.fits_view_model.display_fits_image(file_name)
+        self.file_name, _ = QFileDialog.getOpenFileName(self, "Open FITS File", "", "FITS Files (*.fits)")
+        if self.file_name:
+            self.fits_view_model.display_fits_image(self.file_name)
 
     def open_fits_directory(self):
         """
@@ -363,15 +366,22 @@ class FITSViewer(QMainWindow):
             self.fits_view_model.cached_images[0] = pixmap
             self.image_label2.setPixmap(QPixmap())  # Clear the second label
             self.image_label1.setPixmap(self.fits_view_model.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+            self.image_name_label1.setText(self.file_name)
+            self.image_name_label1.show()
         else:
             if self.fits_view_model.cached_images[0] is None:
                 self.fits_view_model.cached_images[0] = pixmap
                 self.image_label1.setPixmap(self.fits_view_model.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                self.image_name_label1.setText(self.file_name)
+                self.image_name_label1.show()
             elif self.fits_view_model.cached_images[1] is None:
                 self.fits_view_model.cached_images[1] = pixmap
                 self.image_label2.setPixmap(self.fits_view_model.cached_images[1].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                self.image_name_label2.setText(self.file_name)
+                self.image_name_label2.show()
                 if self.fits_view_model.update_subtraction:
                     self.fits_view_model.subtract_from_images()
+                    self.result_name_label.show()
             else:
                 self.fits_view_model.cached_images[0] = self.fits_view_model.cached_images[1]
                 self.fits_view_model.cached_images[1] = pixmap
@@ -381,6 +391,7 @@ class FITSViewer(QMainWindow):
                 
                 if self.fits_view_model.update_subtraction:
                     self.fits_view_model.subtract_from_images()
+                    self.result_name_label.show()
 
         self.show_headers()
         self.adjust_layout_for_match_mode()
@@ -468,6 +479,20 @@ class FITSViewer(QMainWindow):
             self.header_label2.setVisible(False)
             self.header_text_area2.setVisible(False)
             self.fits_view_model.update_subtraction = False
+
+    def toggle_subtract_mode(self, checked):
+        """
+        Toggles the match mode on and off.
+        """
+        self.fits_view_model.update_subtraction = checked
+        if self.fits_view_model.update_subtraction:
+            self.result_name_label.show()
+            self.result_label.show()
+            self.fits_view_model.subtract_from_images()
+        else:
+            self.result_name_label.hide()
+            self.result_label.hide()
+
 
     def update_result(self, result_pixmap: QPixmap):
         """
