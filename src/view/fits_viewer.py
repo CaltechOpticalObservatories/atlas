@@ -4,9 +4,10 @@
 # @author   Prakriti Gupta <pgupta@astro.caltech.edu>
 # -----------------------------------------------------------------------------
 
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QTextEdit, 
-                             QSplitter, QSlider, QAction, QFileDialog, QTabWidget, QDesktopWidget)
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QTextEdit,
+                             QSplitter, QSlider, QAction, QFileDialog, QTabWidget,
+                             QDesktopWidget, QSizePolicy)
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 import numpy as np
 
@@ -95,21 +96,60 @@ class FITSViewer(QMainWindow):
         screen_size = QDesktopWidget().screenGeometry()
         screen_width = screen_size.width()
         screen_height = screen_size.height()
+
         self.image_layout = QVBoxLayout()
+         # Set margins to zero
+        self.image_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Calculate font size based on screen width
+        font_size = int(screen_width * 0.01)
+
+        # Create labels for image names
+        self.image_name_label1 = QLabel("Image 1")
+        self.image_name_label2 = QLabel("Image 2")
+
+        # Set styles for the name labels
+        font = self.image_name_label1.font()
+        font.setBold(True)
+        font.setPointSize(font_size)
+
+        self.image_name_label1.setFont(font)
+        self.image_name_label2.setFont(font)
+
+        self.image_name_label1.setAlignment(Qt.AlignCenter)
+        self.image_name_label2.setAlignment(Qt.AlignCenter)
+
+        # Set margins and padding to zero
+        self.image_name_label1.setContentsMargins(0, 0, 0, 0)
+        self.image_name_label2.setContentsMargins(0, 0, 0, 0)
+        self.image_name_label1.hide()
+        self.image_name_label2.hide()
+
+        # Create image display labels
         self.image_label1 = QLabel()
         self.image_label1.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
         self.image_label2 = QLabel()
         self.image_label2.setFixedSize(int(screen_width * 0.35), int(screen_height * 0.35))
+        self.image_label1.setContentsMargins(0, 0, 0, 0)
+        self.image_label2.setContentsMargins(0, 0, 0, 0)
+        self.image_label1.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.image_label2.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
         self.image_label1.setMouseTracking(True)
         self.image_label1.installEventFilter(self)
         self.image_label2.setMouseTracking(True)
         self.image_label2.installEventFilter(self)
 
+        # Add the name labels and image labels to the layout
+        self.image_layout.addWidget(self.image_name_label1)
         self.image_layout.addWidget(self.image_label1)
+        self.image_layout.addSpacing(10)
+        self.image_layout.addWidget(self.image_name_label2)
         self.image_layout.addWidget(self.image_label2)
 
         # Install event filter
         self.image_label1.installEventFilter(self)
+
 
     def create_result_image_widget(self):
         """
@@ -126,10 +166,23 @@ class FITSViewer(QMainWindow):
         self.result_label.setMouseTracking(True)
         self.result_label.installEventFilter(self)
 
+        # Create labels for image names
+        self.result_name_label = QLabel("Result Image")
+
+        # Set styles for the name labels
+        font = self.result_name_label.font()
+        font.setBold(True)
+        font_size = int(screen_width * 0.01)
+        font.setPointSize(font_size)
+
+        self.result_name_label.setFont(font)
+        self.result_name_label.hide()
+
         self.result_image_widget = QWidget()
         self.result_image_layout = QVBoxLayout()
         self.result_image_layout.setAlignment(Qt.AlignCenter)
         self.result_image_widget.setLayout(self.result_image_layout)
+        self.result_image_layout.addWidget(self.result_name_label)
         self.result_image_layout.addWidget(self.result_label)
 
     def create_contrast_slider(self):
@@ -227,7 +280,7 @@ class FITSViewer(QMainWindow):
         self.tools_menu.addAction(self.match_mode_action)
 
         self.subtract_signal_action = QAction("Subtract Signal", self)
-        self.subtract_signal_action.triggered.connect(self.fits_view_model.subtract_from_images)
+        self.subtract_signal_action.triggered.connect(self.toggle_subtract_mode)
         self.subtract_signal_action.setCheckable(True)
         self.tools_menu.addAction(self.subtract_signal_action)
 
@@ -261,9 +314,9 @@ class FITSViewer(QMainWindow):
         Opens a directory dialog to select a folder, retrieves all FITS file paths from that folder,
         and displays the first FITS image in the directory.
         """
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open FITS File", "", "FITS Files (*.fits)")
-        if file_name:
-            self.fits_view_model.display_fits_image(file_name)
+        self.file_name, _ = QFileDialog.getOpenFileName(self, "Open FITS File", "", "FITS Files (*.fits)")
+        if self.file_name:
+            self.fits_view_model.display_fits_image(self.file_name)
 
     def open_fits_directory(self):
         """
@@ -313,15 +366,22 @@ class FITSViewer(QMainWindow):
             self.fits_view_model.cached_images[0] = pixmap
             self.image_label2.setPixmap(QPixmap())  # Clear the second label
             self.image_label1.setPixmap(self.fits_view_model.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+            self.image_name_label1.setText(self.file_name)
+            self.image_name_label1.show()
         else:
             if self.fits_view_model.cached_images[0] is None:
                 self.fits_view_model.cached_images[0] = pixmap
                 self.image_label1.setPixmap(self.fits_view_model.cached_images[0].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                self.image_name_label1.setText(self.file_name)
+                self.image_name_label1.show()
             elif self.fits_view_model.cached_images[1] is None:
                 self.fits_view_model.cached_images[1] = pixmap
                 self.image_label2.setPixmap(self.fits_view_model.cached_images[1].scaled(self.image_label1.size(), Qt.KeepAspectRatio))
+                self.image_name_label2.setText(self.file_name)
+                self.image_name_label2.show()
                 if self.fits_view_model.update_subtraction:
                     self.fits_view_model.subtract_from_images()
+                    self.result_name_label.show()
             else:
                 self.fits_view_model.cached_images[0] = self.fits_view_model.cached_images[1]
                 self.fits_view_model.cached_images[1] = pixmap
@@ -331,6 +391,7 @@ class FITSViewer(QMainWindow):
                 
                 if self.fits_view_model.update_subtraction:
                     self.fits_view_model.subtract_from_images()
+                    self.result_name_label.show()
 
         self.show_headers()
         self.adjust_layout_for_match_mode()
@@ -418,6 +479,20 @@ class FITSViewer(QMainWindow):
             self.header_label2.setVisible(False)
             self.header_text_area2.setVisible(False)
             self.fits_view_model.update_subtraction = False
+
+    def toggle_subtract_mode(self, checked):
+        """
+        Toggles the match mode on and off.
+        """
+        self.fits_view_model.update_subtraction = checked
+        if self.fits_view_model.update_subtraction:
+            self.result_name_label.show()
+            self.result_label.show()
+            self.fits_view_model.subtract_from_images()
+        else:
+            self.result_name_label.hide()
+            self.result_label.hide()
+
 
     def update_result(self, result_pixmap: QPixmap):
         """
