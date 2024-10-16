@@ -13,7 +13,9 @@ import os
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap, QImage
 from astropy.io import fits
+import threading
 import numpy as np
+import zmq
 
 class FITSViewModel(QObject):
     image_data_changed = pyqtSignal(QPixmap)
@@ -32,6 +34,9 @@ class FITSViewModel(QObject):
         self.reset_image = None
         self.image_dir = None
         self.update_subtraction = False
+
+         # Start a thread for ZMQ receiving when connecting
+        self.receiver_thread = None
 
     def display_fits_image(self, file_name):
         """
@@ -325,3 +330,25 @@ class FITSViewModel(QObject):
         self.result_image = None
         self.signal_image = None
         self.reset_image = None
+
+    def connect_to_zmq(self, zmq_address):
+        """Connect to ZMQ and start receiving messages."""
+        self.receiver_thread = threading.Thread(target=self.receive_data, args=(zmq_address,))
+        self.receiver_thread.daemon = True
+        self.receiver_thread.start()
+
+    def receive_data(self, zmq_address):
+        """Run the ZMQ receiver in a separate thread."""
+        context = zmq.Context()
+        # Use PULL socket to receive requests
+        socket = context.socket(zmq.PULL)
+        # Bind to the given address
+        socket.bind(zmq_address)
+
+        while True:
+            # Wait for a request
+            # Receive a file name request
+            file_name = socket.recv_string()  
+
+            # Load the FITS file and update the GUI
+            self.display_fits_image(file_name)
