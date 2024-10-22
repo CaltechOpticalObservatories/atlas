@@ -331,24 +331,30 @@ class FITSViewModel(QObject):
         self.signal_image = None
         self.reset_image = None
 
-    def connect_to_zmq(self, zmq_address):
+    def connect_to_zmq(self, zmq_address, socket_type=zmq.XSUB):
         """Connect to ZMQ and start receiving messages."""
         self.receiver_thread = threading.Thread(target=self.receive_data, args=(zmq_address,))
         self.receiver_thread.daemon = True
         self.receiver_thread.start()
 
-    def receive_data(self, zmq_address):
+    def receive_data(self, zmq_address, socket_type):
         """Run the ZMQ receiver in a separate thread."""
         context = zmq.Context()
-        # Use PULL socket to receive requests
-        socket = context.socket(zmq.PULL)
+        # Use the passed socket type
+        socket = context.socket(socket_type)
         # Bind to the given address
         socket.bind(zmq_address)
 
-        while True:
-            # Wait for a request
-            # Receive a file name request
-            file_name = socket.recv_string()  
+        try:
+            while True:
+                # Wait for a request and receive a file name
+                file_name = socket.recv_string()
 
-            # Load the FITS file and update the GUI
-            self.display_fits_image(file_name)
+                # Load the FITS file and update the GUI
+                self.display_fits_image(file_name)
+
+        except Exception as e:
+            print(f"Error in receive_data: {e}")
+        finally:
+            socket.close()
+            context.term()
