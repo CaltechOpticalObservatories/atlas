@@ -6,7 +6,7 @@
 
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QTextEdit,
                              QSplitter, QSlider, QAction, QFileDialog, QTabWidget,
-                             QDesktopWidget, QSizePolicy)
+                             QDesktopWidget, QSizePolicy, QInputDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 import numpy as np
@@ -264,9 +264,9 @@ class FITSViewer(QMainWindow):
         """
         self.connect_menu = self.menu_bar.addMenu("Connect")
 
-        self.connect_redis_action = QAction("Connect to Database", self)
-        self.connect_redis_action.triggered.connect(self.connect_to_db)
-        self.connect_menu.addAction(self.connect_redis_action)
+        self.connect_zmq_action = QAction("Connect to ZMQ", self)
+        self.connect_zmq_action.triggered.connect(self.connect_to_zmq)
+        self.connect_menu.addAction(self.connect_zmq_action)
 
     def create_tools_menu(self):
         """
@@ -402,11 +402,13 @@ class FITSViewer(QMainWindow):
         """
         self.tab_widget.setCurrentWidget(self.header_tab)
 
-    def connect_to_db(self):
-        """
-        Handles the connection to selected database.
-        """
-        print("Connecting to database...") 
+    def connect_to_zmq(self):
+        """Connect to ZMQ (if needed for your application)."""
+        zmq_address, ok = QInputDialog.getText(self, "ZMQ Address", "Enter the ZMQ address (e.g., tcp://localhost:5555):")
+        if ok and zmq_address:
+            # Pass the address to the ViewModel
+            self.fits_view_model.connect_to_zmq(zmq_address)
+            print(f"Connected to ZMQ at {zmq_address} and listening for messages...")
 
     def view_options(self):
         """
