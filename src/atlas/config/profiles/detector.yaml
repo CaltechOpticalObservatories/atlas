@@ -1,0 +1,15 @@
+# COO detector work: compare frames side by side and subtract signal/reset taps.
+display:
+  mode: tile
+  tile_columns: 1
+tools:
+  header: true
+  histogram: true
+  tap_subtraction:
+    enabled: true
+    tap_width: 128
+    num_taps: 32
+  zmq:
+    enabled: true
+    address: tcp://localhost:5555
+    socket_type: SUB

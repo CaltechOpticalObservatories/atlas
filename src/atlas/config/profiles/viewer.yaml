@@ -1,0 +1,6 @@
+# General-purpose FITS viewing: images, headers and pixel histograms.
+display:
+  mode: single
+tools:
+  header: true
+  histogram: true
