@@ -1,9 +1,6 @@
 # atlas
 
-**atlas** is a Python GUI for viewing FITS images, in the spirit of SAOImage DS9
-but deliberately not a kitchen sink. Which features exist in a session is chosen
-*before* the GUI starts, from a profile or a configuration file — a feature that
-is switched off is never built, not merely hidden.
+**atlas** is a Python GUI for viewing FITS images, in the spirit of SAOImage DS9.
 
 ## Installation
 
@@ -15,8 +12,7 @@ pip install -e ".[zmq]"     # also the optional ZMQ tool
 pip install -e ".[dev]"     # also pylint, for the CI checks
 ```
 
-Dependencies are declared in `pyproject.toml`; `requirements.txt` is kept as a
-thin wrapper so `pip install -r requirements.txt` still works.
+Dependencies are declared in `pyproject.toml`.
 
 ## Usage
 
@@ -105,20 +101,6 @@ python src/main.py --profile detector --disable zmq
 | `minimal` | Image display only — no panels, no tools. |
 | `viewer` | General FITS viewing: headers and histograms. |
 | `detector` | COO detector work: tiled frames, tap subtraction, ZMQ. |
-
-## Project structure
-
-atlas uses a src layout, so everything lives under one importable package:
-
-- **`pyproject.toml`** — packaging, dependencies and the `atlas` entry point.
-- **`src/atlas/main.py`** — command line, configuration, then launch.
-- **`src/atlas/config/`** — configuration schema, loader and bundled profiles.
-- **`src/atlas/model/`** — FITS reading and the `Frame` type.
-- **`src/atlas/viewmodel/`** — the frame list and display state.
-- **`src/atlas/view/`** — main window, frame widgets and the tiling grid.
-- **`src/atlas/features/`** — optional tools, each registered under the config
-  key that enables it. Adding a feature means adding a module here and a key in
-  the schema; nothing else needs to know about it.
 
 ## Reporting Issues
 
