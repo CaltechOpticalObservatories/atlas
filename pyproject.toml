@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas"
+version = "0.1.0"
+description = "A configurable FITS image viewer"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "Prakriti Gupta", email = "pgupta@astro.caltech.edu" },
+]
+keywords = ["FITS", "astronomy", "viewer", "imaging"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+
+dependencies = [
+    "astropy",
+    "matplotlib",
+    "numpy",
+    "PyQt5",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+# Only needed for the optional `zmq` tool, which is off by default.
+zmq = ["pyzmq"]
+dev = ["pylint"]
+
+[project.urls]
+Homepage = "https://github.com/CaltechOpticalObservatories/atlas"
+Issues = "https://github.com/CaltechOpticalObservatories/atlas/issues"
+
+[project.scripts]
+atlas = "atlas.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# The bundled profiles are data, not code, so they must be declared explicitly
+# or `--profile` finds nothing in an installed copy.
+"atlas.config" = ["profiles/*.yaml"]

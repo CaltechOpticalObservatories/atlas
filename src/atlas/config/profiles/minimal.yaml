@@ -1,0 +1,6 @@
+# Nothing but image display -- no side panels, no tools.
+display:
+  mode: single
+tools:
+  header: false
+  histogram: false

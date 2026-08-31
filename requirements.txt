@@ -1,4 +1,3 @@
-astropy
-numpy
-PyQt5
-matplotlib
+# Runtime dependencies are declared in pyproject.toml; this file installs
+# atlas in editable mode so `pip install -r requirements.txt` still works.
+-e .[zmq]
