@@ -35,7 +35,7 @@ def install_synthetic_producer():
     def fake_attach(_segment_name, _shm_dir=""):
         return "fake-handle"
 
-    def fake_wait_for_frame(_image, _timeout):
+    def fake_wait_for_frame(_image, timeout):  # pylint: disable=unused-argument
         counter["n"] += 1
         time.sleep(1 / 60)  # simulate a 60 Hz producer
         t = counter["n"] * 0.05
