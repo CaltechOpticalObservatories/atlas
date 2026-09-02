@@ -127,6 +127,10 @@ class ShmTool(Tool):
         self.disconnect_action.setEnabled(False)
         self.window.show_message("Disconnected from SHM.")
 
+    def shutdown(self):
+        """Stops the reader thread so the app can actually exit."""
+        self.receiver.stop()
+
     def set_display_rate(self):
         """Opens a slider that live-tunes the display rate, independent of connection state."""
         slot = self.receiver.slot  # snapshot once: the receiver thread may clear it concurrently

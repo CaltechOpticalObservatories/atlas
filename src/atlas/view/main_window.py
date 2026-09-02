@@ -44,6 +44,12 @@ class AtlasWindow(QMainWindow):
 
         self.update_frame_actions()
 
+    def closeEvent(self, event):  # pylint: disable=invalid-name
+        """Qt override: stop tools' background work so the process actually exits."""
+        for tool in self.tools.values():
+            tool.shutdown()
+        super().closeEvent(event)
+
     def create_menus(self):
         """Builds the menu bar."""
         menu_bar = self.menuBar()
