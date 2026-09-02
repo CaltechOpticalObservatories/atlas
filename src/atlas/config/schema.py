@@ -95,6 +95,30 @@ class ZmqConfig:
 
 
 @dataclass
+class ShmConfig:
+    """
+    Live-displays frames arriving on an ImageStreamIO shared-memory segment.
+
+    Off by default: attaching to a segment assumes a running producer
+    (camerad); a plain local viewing session has no reason to do that.
+    """
+    enabled: bool = False
+    segment_name: str = "camera"
+    shm_dir: str = ""
+    display_fps_cap: float = 15.0
+
+    def validate(self, path):
+        if not isinstance(self.segment_name, str) or not self.segment_name:
+            raise ConfigError(
+                f"{path}.segment_name must be a non-empty string, got {self.segment_name!r}")
+        if not isinstance(self.shm_dir, str):
+            raise ConfigError(f"{path}.shm_dir must be a string, got {self.shm_dir!r}")
+        if not isinstance(self.display_fps_cap, (int, float)) or self.display_fps_cap <= 0:
+            raise ConfigError(
+                f"{path}.display_fps_cap must be a positive number, got {self.display_fps_cap!r}")
+
+
+@dataclass
 class ToolsConfig:
     """
     Optional tools. Everything here is opt-in so that a default launch stays a
@@ -104,6 +128,7 @@ class ToolsConfig:
     histogram: bool = False
     tap_subtraction: TapSubtractionConfig = field(default_factory=TapSubtractionConfig)
     zmq: ZmqConfig = field(default_factory=ZmqConfig)
+    shm: ShmConfig = field(default_factory=ShmConfig)
 
     def enabled_names(self):
         """Names of the tools this configuration switches on."""
@@ -121,6 +146,7 @@ class ToolsConfig:
                 raise ConfigError(f"{path}.{name} must be true or false, got {value!r}")
         self.tap_subtraction.validate(f"{path}.tap_subtraction")
         self.zmq.validate(f"{path}.zmq")
+        self.shm.validate(f"{path}.shm")
 
 
 @dataclass
