@@ -13,3 +13,7 @@ tools:
     enabled: true
     address: tcp://localhost:5555
     socket_type: SUB
+  # Disabled until verified against a real segment
+  shm:
+    enabled: false
+    segment_name: hispec_tracking_camera
