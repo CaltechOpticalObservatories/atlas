@@ -12,36 +12,46 @@ class ShmFrame:
     keywords: dict = field(default_factory=dict)
 
 
-# UNVERIFIED: no environment with pyImageStreamIO + a live segment has been
-# available yet (see plans/ATLAS-SHM-VIEWER-PLAN.md open question 3). This is
-# a best-effort implementation against pyImageStreamIO's typical shape, kept
-# isolated here so it is the only thing M1's real spike needs to correct.
+@dataclass
+class _Handle:
+    """
+    An attached segment plus the semaphore index this reader waits on.
+
+    ImageStreamIOWrap's Image doesn't support arbitrary attributes (no
+    py::dynamic_attr()), so the index is tracked here instead.
+    """
+    image: object
+    sem_index: int
+
 
 def attach(segment_name, shm_dir=""):
     """Attaches to an existing ImageStreamIO segment; returns an opaque handle."""
     # Imported here, not at module level, so atlas still runs when
-    # pyImageStreamIO is absent and this feature is switched off.
+    # ImageStreamIOWrap is absent and this feature is switched off.
     import os  # pylint: disable=import-outside-toplevel
-    from pyImageStreamIO import Image  # pylint: disable=import-outside-toplevel
+    import ImageStreamIOWrap  # pylint: disable=import-outside-toplevel,import-error
 
     if shm_dir:
         os.environ["MILK_SHM_DIR"] = shm_dir
 
-    image = Image()
-    image.open(segment_name)
-    return image
+    image = ImageStreamIOWrap.Image()
+    status = image.open(segment_name)
+    if status != 0:
+        raise RuntimeError(f'could not open segment "{segment_name}" (status {status})')
+
+    return _Handle(image=image, sem_index=image.getsemwaitindex(0))
 
 
-def wait_for_frame(image, timeout):
+def wait_for_frame(handle, timeout):
     """Blocks until a new frame posts or timeout (seconds) elapses; None on timeout."""
-    timed_out = image.semwait(timeout) != 0
+    timed_out = handle.image.semtimedwait(handle.sem_index, timeout) != 0
     if timed_out:
         return None
 
-    keywords = {kw.name: kw.value for kw in image.kw if kw.name}
-    return ShmFrame(data=np.array(image.copy()), keywords=keywords)
+    keywords = {name: kw.value for name, kw in handle.image.get_kws().items()}
+    return ShmFrame(data=np.array(handle.image.copy()), keywords=keywords)
 
 
-def close(image):
+def close(handle):
     """Detaches from the segment."""
-    image.close()
+    handle.image.close()
