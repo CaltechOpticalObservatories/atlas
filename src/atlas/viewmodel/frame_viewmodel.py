@@ -2,6 +2,7 @@
 import os
 
 # Third-Party Library Imports
+from astropy.io import fits
 from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap
 
@@ -33,6 +34,7 @@ class FrameViewModel(QObject):
         self.frames = []
         self.current_index = -1
         self.display_mode = config.display.mode
+        self._live_frame = None  # updated in place, see update_live_frame()
 
     def load_file(self, file_name):
         """
@@ -62,6 +64,30 @@ class FrameViewModel(QObject):
         self.frames_changed.emit()
         self.current_changed.emit(self.current_index)
         return frame
+
+    def update_live_frame(self, data, keywords):
+        """Updates the live frame in place instead of appending a new one."""
+        pixmap = self.render(data)
+        if pixmap is None:
+            return
+
+        header = fits.Header(keywords)  # header.py expects frame.header.cards
+
+        if self._live_frame is not None and self._live_frame not in self.frames:
+            self._live_frame = None  # user deleted it; treat as never created
+
+        if self._live_frame is None:
+            self._live_frame = Frame(data, header)
+            self._live_frame.pixmap = pixmap
+            self.frames.append(self._live_frame)
+            self.current_index = len(self.frames) - 1
+            self.frames_changed.emit()
+            self.current_changed.emit(self.current_index)
+        else:
+            self._live_frame.data = data
+            self._live_frame.header = header
+            self._live_frame.pixmap = pixmap
+            self.current_changed.emit(self.current_index)
 
     def load_files(self, file_names):
         """Loads several files, one frame each. Returns how many succeeded."""

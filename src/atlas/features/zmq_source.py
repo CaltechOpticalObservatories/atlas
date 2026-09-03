@@ -121,6 +121,10 @@ class ZmqTool(Tool):
         self.disconnect_action.setEnabled(False)
         self.window.show_message("Disconnected from ZMQ.")
 
+    def shutdown(self):
+        """Stops the receiver thread so the app can actually exit."""
+        self.receiver.stop()
+
     def on_file(self, file_name):
         """Loads a file announced over ZMQ. Runs on the GUI thread."""
         self.view_model.load_file(file_name)

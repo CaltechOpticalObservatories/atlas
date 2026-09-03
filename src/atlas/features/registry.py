@@ -48,3 +48,6 @@ class Tool:
     def build(self):
         """Adds this tool's menu entries and panels to the window."""
         raise NotImplementedError
+
+    def shutdown(self):
+        """Stops any background work. No-op unless a tool overrides it."""

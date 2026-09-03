@@ -1,0 +1,22 @@
+name: SHM viewer check
+
+on: [push]
+
+jobs:
+  synthetic-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.12"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e "."
+    - name: Run synthetic shm_source check
+      env:
+        QT_QPA_PLATFORM: offscreen
+      run: |
+        python tests/check_shm_source.py
