@@ -153,5 +153,7 @@ def wait_for_frame(handle, timeout):
 
 def close(handle):
     """Detaches from the segment."""
-    handle.mm.close()
-    os.close(handle.fd)
+    try:
+        handle.mm.close()
+    finally:
+        os.close(handle.fd)
