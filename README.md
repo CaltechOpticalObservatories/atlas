@@ -48,6 +48,26 @@ and the display mode decides how frames appear on screen.
 Move between frames with `Ctrl+]` and `Ctrl+[`, or click a tile. `Ctrl+W`
 closes the current frame.
 
+## Scales
+
+**View → Scale** decides how pixel values map onto the brightness of the
+display. It is a property of the frame, not of the window, so in `tile` mode
+one image can be shown on a log scale beside another on a linear one.
+
+| Scale | What it does | Shortcut |
+| --- | --- | --- |
+| `linear` | brightness proportional to pixel value | `Ctrl+3` |
+| `log` | stretches the faint end, compresses the bright end | `Ctrl+4` |
+
+Both scales first map the frame's own minimum and maximum onto the full display
+range, so changing scale never clips a pixel that was visible before, it only
+redistributes contrast. Only the rendered pixmap changes; the raw data is left
+alone, so switching back and forth is lossless.
+
+The histogram window has its own **Log count axis** checkbox, independent of the
+frame's scale. A pixel histogram is usually dominated by a single sky or bias
+peak, and a log count axis is what makes the faint tail visible.
+
 ## Configuration
 
 A configuration is resolved from, in increasing order of precedence: built-in

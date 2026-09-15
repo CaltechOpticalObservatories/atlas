@@ -3,8 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QSlider, QLabel,
-                             QPushButton)
+                             QPushButton, QCheckBox)
 from PyQt5.QtCore import Qt
+
+# Counts of 0 have no place on a log axis, and a bar chart drawn from a zero
+# baseline has none either. The axis therefore starts just below a count of 1,
+# the smallest count a bin can actually hold.
+LOG_COUNT_FLOOR = 0.5
 
 
 class Histogram(QDialog):
@@ -48,6 +53,12 @@ class Histogram(QDialog):
         self.bin_label = QLabel()
         layout.addWidget(self.bin_label)
 
+        # Pixel histograms are usually dominated by one sky/bias peak, so the
+        # faint tail is invisible on a linear count axis.
+        self.log_counts = QCheckBox("Log count axis")
+        self.log_counts.toggled.connect(self.update_histogram)
+        layout.addWidget(self.log_counts)
+
         navigation = QHBoxLayout()
         self.previous_button = QPushButton("Previous")
         self.next_button = QPushButton("Next")
@@ -64,8 +75,9 @@ class Histogram(QDialog):
         plt.close(self.figure)
         super().closeEvent(event)
 
-    def update_histogram(self):
-        """Redraws the histogram for the current frame and bin count."""
+    def update_histogram(self, *_):
+        """Redraws the histogram for the current frame, bin count and axis scale."""
+        # clear() resets the axis scale to linear along with everything else
         self.axis.clear()
 
         label, data = self.entries[self.current_index]
@@ -87,11 +99,24 @@ class Histogram(QDialog):
 
         counts, edges = np.histogram(values, bins=bin_count, range=(low, high))
 
-        self.axis.bar(edges[:-1], counts, width=np.diff(edges),
-                      align="edge", color="#4a90d9")
+        log_counts = self.log_counts.isChecked()
+        if log_counts:
+            # Heights are measured from the floor rather than from 0, so a bar
+            # still reaches exactly its own count.
+            bottom = LOG_COUNT_FLOOR
+            heights = np.maximum(counts, LOG_COUNT_FLOOR) - LOG_COUNT_FLOOR
+        else:
+            bottom, heights = 0, counts
+
+        self.axis.bar(edges[:-1], heights, width=np.diff(edges),
+                      align="edge", color="#4a90d9", bottom=bottom)
         self.axis.set_title(f"{label}  ({self.current_index + 1} of {len(self.entries)})")
         self.axis.set_xlabel("Pixel value")
-        self.axis.set_ylabel("Count")
+        self.axis.set_ylabel("Count (log)" if log_counts else "Count")
+        if log_counts:
+            self.axis.set_yscale("log")
+            self.axis.set_ylim(bottom=LOG_COUNT_FLOOR,
+                               top=max(float(counts.max()), 1.0) * 1.5)
         self.axis.grid(True, alpha=0.3)
 
         self.bin_label.setText(

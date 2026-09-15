@@ -6,7 +6,7 @@ from astropy.io import fits
 from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap
 
-from atlas.model.fits_model import FITSModel
+from atlas.model.fits_model import FITSModel, SCALES
 from atlas.model.frame import Frame
 
 # FITS files are conventionally named with any of these extensions.
@@ -55,7 +55,7 @@ class FrameViewModel(QObject):
             return None
 
         frame = Frame(data, header, file_name)
-        frame.pixmap = self.render(data)
+        frame.pixmap = self.render(data, frame.scale)
         if frame.pixmap is None:
             return None
 
@@ -67,17 +67,21 @@ class FrameViewModel(QObject):
 
     def update_live_frame(self, data, keywords):
         """Updates the live frame in place instead of appending a new one."""
-        pixmap = self.render(data)
+        if self._live_frame is not None and self._live_frame not in self.frames:
+            self._live_frame = None  # user deleted it; treat as never created
+
+        # Whatever scale the user chose for the live frame has to survive the
+        # next arriving image, so read it before rendering.
+        scale = "linear" if self._live_frame is None else self._live_frame.scale
+        pixmap = self.render(data, scale)
         if pixmap is None:
             return
 
         header = fits.Header(keywords)  # header.py expects frame.header.cards
 
-        if self._live_frame is not None and self._live_frame not in self.frames:
-            self._live_frame = None  # user deleted it; treat as never created
-
         if self._live_frame is None:
             self._live_frame = Frame(data, header)
+            self._live_frame.scale = scale
             self._live_frame.pixmap = pixmap
             self.frames.append(self._live_frame)
             self.current_index = len(self.frames) - 1
@@ -111,18 +115,43 @@ class FrameViewModel(QObject):
         paths.sort(key=os.path.getmtime)
         return self.load_files(paths)
 
-    def render(self, data):
-        """Renders raw FITS data to a display pixmap."""
+    def render(self, data, scale="linear"):
+        """Renders raw FITS data to a display pixmap on the given scale."""
         plane = self.select_display_plane(data)
         if plane is None:
             return None
 
         if plane.ndim == 3:
+            # Already 8-bit colour: there is no detector range left to rescale.
             q_image = self.fits_model.convert_to_qimage(plane)
         else:
-            q_image = self.fits_model.convert_to_qimage(self.fits_model.normalize_image(plane))
+            normalized = self.fits_model.normalize_image(plane, scale)
+            q_image = self.fits_model.convert_to_qimage(normalized)
 
         return QPixmap.fromImage(q_image)
+
+    def set_current_scale(self, scale):
+        """
+        Re-renders the current frame on a different intensity scale.
+
+        Only the pixmap changes: the raw data is untouched, so switching back
+        and forth is lossless.
+        """
+        if scale not in SCALES:
+            self.message.emit(f"Unknown intensity scale: {scale}.")
+            return
+
+        frame = self.current_frame
+        if frame is None or frame.scale == scale:
+            return
+
+        pixmap = self.render(frame.data, scale)
+        if pixmap is None:
+            return
+
+        frame.scale = scale
+        frame.pixmap = pixmap
+        self.current_changed.emit(self.current_index)
 
     def select_display_plane(self, data):
         """
