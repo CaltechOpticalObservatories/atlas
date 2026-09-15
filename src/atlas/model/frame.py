@@ -19,10 +19,8 @@ class Frame:
         self.data = data
         self.header = header
         self.file_name = file_name
-        # Rendered form of `data`, filled in by the view model. Kept beside the
-        # raw array rather than replacing it: a pixmap is 8-bit and device
-        # dependent, so it can never stand in for detector counts.
         self.pixmap = None
+        self.scale = "linear"
 
     @property
     def label(self):

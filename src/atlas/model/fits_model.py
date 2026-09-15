@@ -3,6 +3,11 @@ from PyQt5.QtGui import QImage
 from astropy.io import fits
 import numpy as np
 
+SCALES = ("linear", "log")
+# DS9's log scale is log(a*x + 1) / log(a + 1) over values already mapped to
+# [0, 1]; `a` decides how much of the display range the faint end gets, and
+LOG_SOFTENING = 1000.0
+
 
 class FITSModel:
     def load_fits_image(self, file_name):
@@ -31,17 +36,24 @@ class FITSModel:
             # dynamic, so pylint cannot see that this is an HDU with a header.
             return None, hdul[0].header.copy()
 
-    def normalize_image(self, image_data):
+    def normalize_image(self, image_data, scale="linear"):
         """
         Normalizes image data to the range [0, 255] for display purposes,
         handling various data types from FITS files.
 
         Args:
             image_data (numpy.ndarray): The input image data to be normalized.
+            scale (str): Intensity scale to apply, one of ``SCALES``. The data
+                is always mapped to [0, 1] by its own min and max first, so the
+                scale changes only how that span is distributed over the
+                display range.
 
         Returns:
             numpy.ndarray: The normalized image data scaled to the range [0, 255].
         """
+        if scale not in SCALES:
+            raise ValueError(f"Unknown intensity scale: {scale!r}")
+
         # Record the original kind before casting; the cast to float would
         # otherwise make an integer check always fail.
         kind = image_data.dtype.kind
@@ -67,13 +79,17 @@ class FITSModel:
             # Constant image: render it as uniform black rather than dividing by zero.
             return np.zeros(image_data.shape, dtype=np.uint8)
 
-        normalized_data = 255.0 * (image_data - min_val) / value_range
+        unit_data = (image_data - min_val) / value_range
 
-        # Non-finite pixels normalize to NaN; pin them to the low end.
-        normalized_data = np.where(finite, normalized_data, 0.0)
+        # Non-finite pixels normalize to NaN
+        unit_data = np.where(finite, unit_data, 0.0)
 
-        # Clip values to the range [0, 255]
-        return np.clip(normalized_data, 0, 255).astype(np.uint8)
+        # Clipping before the transform keeps log's argument positive.
+        unit_data = np.clip(unit_data, 0.0, 1.0)
+        if scale == "log":
+            unit_data = np.log1p(LOG_SOFTENING * unit_data) / np.log1p(LOG_SOFTENING)
+
+        return np.clip(255.0 * unit_data, 0, 255).astype(np.uint8)
 
     def convert_to_qimage(self, image_data):
         """

@@ -3,9 +3,14 @@ from PyQt5.QtWidgets import (QMainWindow, QAction, QActionGroup, QFileDialog,
                              QDesktopWidget)
 
 from atlas.features import build_tools
+from atlas.model.fits_model import SCALES
 from .frame_grid import FrameGrid
 
 FITS_FILTER = "FITS Files (*.fits *.fit *.fts *.fits.gz *.fz);;All Files (*)"
+SCALE_TITLES = {
+    "linear": ("Linear", "Ctrl+3"),
+    "log": ("Log", "Ctrl+4"),
+}
 
 
 class AtlasWindow(QMainWindow):
@@ -73,6 +78,8 @@ class AtlasWindow(QMainWindow):
 
         self.view_menu = menu_bar.addMenu("View")
         self.create_display_mode_actions()
+        self.view_menu.addSeparator()
+        self.create_scale_actions()
 
         # Created up front so tools have somewhere to attach; hidden if empty.
         self.tools_menu = menu_bar.addMenu("Tools")
@@ -95,6 +102,35 @@ class AtlasWindow(QMainWindow):
             self.mode_actions[mode] = action
 
         self.view_model.display_mode_changed.connect(self.sync_display_mode)
+
+    def create_scale_actions(self):
+        """Adds the intensity scale choice, which applies to the current frame."""
+        self.scale_menu = self.view_menu.addMenu("Scale")
+        group = QActionGroup(self)
+        group.setExclusive(True)
+
+        self.scale_actions = {}
+        for scale in SCALES:
+            title, shortcut = SCALE_TITLES.get(scale, (scale.capitalize(), None))
+            action = QAction(title, self)
+            action.setCheckable(True)
+            if shortcut:
+                action.setShortcut(shortcut)
+            action.triggered.connect(lambda _, s=scale: self.choose_scale(s))
+            group.addAction(action)
+            self.scale_menu.addAction(action)
+            self.scale_actions[scale] = action
+
+    def choose_scale(self, scale):
+        """
+        Applies a scale to the current frame, from the menu.
+
+        The action group has already ticked the action the user clicked, so the
+        menu is re-synced afterwards: a re-render that could not happen must
+        not leave a tick claiming it did.
+        """
+        self.view_model.set_current_scale(scale)
+        self.sync_scale_actions(self.view_model.current_frame)
 
     def add_action(self, menu, title, slot, shortcut=None):
         """Creates a menu action wired to `slot`."""
@@ -141,10 +177,29 @@ class AtlasWindow(QMainWindow):
             action.setEnabled(count > 1)
 
         frame = self.view_model.current_frame
+        self.sync_scale_actions(frame)
+
         title = self.config.window.title
         if frame is not None:
             title = f"{title} — {frame.label} ({self.view_model.current_index + 1}/{count})"
         self.setWindowTitle(title)
+
+    def sync_scale_actions(self, frame):
+        """
+        Points the Scale menu at the current frame.
+
+        The scale belongs to the frame, so with nothing loaded there is nothing
+        to scale and the menu goes grey rather than claiming a setting.
+        """
+        self.scale_menu.setEnabled(frame is not None)
+        if frame is None:
+            for action in self.scale_actions.values():
+                action.setChecked(False)
+            return
+
+        action = self.scale_actions.get(frame.scale)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
 
     def show_message(self, text):
         """Shows a message in the status bar."""
