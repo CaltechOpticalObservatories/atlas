@@ -119,6 +119,28 @@ class ShmConfig:
 
 
 @dataclass
+class StatisticsConfig:
+    """
+    A dock panel of pixel statistics for the current frame.
+
+    Off by default, like every other panel. `update_hz` caps how often the
+    figures are recomputed while a live stream is running: the median costs an
+    order of magnitude more than the other statistics, so recomputing on every
+    displayed frame would compete with rendering it.
+    """
+    enabled: bool = False
+    update_hz: float = 2.0
+
+    def validate(self, path):
+        if not isinstance(self.update_hz, (int, float)) or isinstance(self.update_hz, bool):
+            raise ConfigError(
+                f"{path}.update_hz must be a number, got {self.update_hz!r}")
+        if not 0.1 <= self.update_hz <= 60:
+            raise ConfigError(
+                f"{path}.update_hz must be between 0.1 and 60, got {self.update_hz!r}")
+
+
+@dataclass
 class ToolsConfig:
     """
     Optional tools. Everything here is opt-in so that a default launch stays a
@@ -129,6 +151,7 @@ class ToolsConfig:
     tap_subtraction: TapSubtractionConfig = field(default_factory=TapSubtractionConfig)
     zmq: ZmqConfig = field(default_factory=ZmqConfig)
     shm: ShmConfig = field(default_factory=ShmConfig)
+    statistics: StatisticsConfig = field(default_factory=StatisticsConfig)
 
     def enabled_names(self):
         """Names of the tools this configuration switches on."""
@@ -147,6 +170,7 @@ class ToolsConfig:
         self.tap_subtraction.validate(f"{path}.tap_subtraction")
         self.zmq.validate(f"{path}.zmq")
         self.shm.validate(f"{path}.shm")
+        self.statistics.validate(f"{path}.statistics")
 
 
 @dataclass

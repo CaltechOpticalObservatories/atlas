@@ -68,6 +68,23 @@ The histogram window has its own **Log count axis** checkbox, independent of the
 frame's scale. A pixel histogram is usually dominated by a single sky or bias
 peak, and a log count axis is what makes the faint tail visible.
 
+## Statistics
+
+The **statistics** tool adds a dock panel summarising the current frame's pixel
+values -- mean, median, standard deviation, min and max, plus the pixel count.
+Enable it with `--enable statistics` or `tools.statistics` in a configuration.
+
+The figures come from the raw array, not the rendered image, so they describe
+detector counts and do not move when the display scale changes. Blank pixels
+(NaN/inf) are excluded and reported separately, since a single NaN would
+otherwise make every statistic NaN.
+
+Recomputing is not free. The median alone costs about ten times the other
+statistics put together, roughly 30 ms on a 2048x2048 frame. So while a live
+stream is running the panel refreshes at `update_hz` (2 Hz by default) rather
+than on every displayed frame. Switching frames by hand still recomputes
+immediately, and a hidden panel does no work at all.
+
 ## Configuration
 
 A configuration is resolved from, in increasing order of precedence: built-in
@@ -90,6 +107,7 @@ tools:
   histogram: false         # pixel-intensity histograms
   tap_subtraction: false   # COO detector signal/reset taps
   zmq: false               # load frames announced over ZMQ
+  statistics: false        # pixel statistics panel
 ```
 
 Any tool taking options can be written either as a bare boolean or as a section:
@@ -105,6 +123,9 @@ tools:
     address: tcp://localhost:5555
     socket_type: SUB       # SUB | PULL
     bind: false
+  statistics:
+    enabled: true
+    update_hz: 2.0         # recompute rate while a live stream is running
 ```
 
 Individual tools can be toggled from the command line without editing anything:
