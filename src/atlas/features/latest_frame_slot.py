@@ -8,7 +8,7 @@ class LatestFrameSlot:
     Thread-safe hand-off point between a fast producer and a slower consumer.
 
     put() always overwrites, so a producer running far ahead of the consumer
-    (e.g. a 60 Hz frame source) never queues a backlog -- at most one pending
+    (e.g. a 60 Hz frame source) never queues a backlog: at most one pending
     frame exists at any time. take() only returns a frame once at least
     min_interval seconds have passed since the last successful take, so a
     consumer that calls it on every arrival still can't be driven faster than

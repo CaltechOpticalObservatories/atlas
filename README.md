@@ -4,7 +4,7 @@
 
 ## Installation
 
-Requires Python 3.10 or higher.
+Requires Python 3.14 or higher.
 
 ```sh
 pip install -e .            # atlas and its runtime dependencies
@@ -71,7 +71,7 @@ peak, and a log count axis is what makes the faint tail visible.
 ## Statistics
 
 The **statistics** tool adds a dock panel summarising the current frame's pixel
-values -- mean, median, standard deviation, min and max, plus the pixel count.
+values: mean, median, standard deviation, min and max, plus the pixel count.
 Enable it with `--enable statistics` or `tools.statistics` in a configuration.
 
 The figures come from the raw array, not the rendered image, so they describe
