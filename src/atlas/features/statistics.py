@@ -35,9 +35,9 @@ class StatisticsTool(Tool):
     A dock panel summarising the current frame's pixel values.
 
     The statistics come from the raw data, so they are unaffected by the
-    frame's display scale. Recomputing them is not free -- the median alone
-    costs an order of magnitude more than the rest -- so a live stream updates
-    them at settings.update_hz rather than on every displayed frame.
+    frame's display scale. Recomputing them is not free: the median alone costs
+    an order of magnitude more than the rest, so a live stream updates them at
+    settings.update_hz rather than on every displayed frame.
     """
 
     def __init__(self, window, settings):
@@ -115,9 +115,9 @@ class StatisticsTool(Tool):
         """
         Asks for a refresh, subject to the throttle.
 
-        Switching frames by hand recomputes at once -- a stale panel next to a
-        newly selected frame reads as a bug. Only repeated updates to the same
-        frame, which is what a live stream produces, are rate limited.
+        Switching frames by hand recomputes at once, because a stale panel
+        beside a newly selected frame reads as a bug. Only repeated updates to
+        the same frame, which is what a live stream produces, are rate limited.
         """
         if self.dock is None or not self.dock.isVisible():
             self.pending = True
