@@ -68,6 +68,37 @@ The histogram window has its own **Log count axis** checkbox, independent of the
 frame's scale. A pixel histogram is usually dominated by a single sky or bias
 peak, and a log count axis is what makes the faint tail visible.
 
+## Hover readout
+
+Resting the cursor on a pixel puts its index and its count on the right of the
+status bar:
+
+```
+(341, 169)  27,922
+```
+
+The indices are 0-based, `x` across and `y` down, so the pair reads directly as
+`data[y, x]` in whatever you are inspecting the frame with. This is numpy's
+convention rather than DS9's 1-based one, and `y` counts down because atlas
+draws the first row of the array at the top of the tile.
+
+The count comes from the raw array, so it is a detector count and does not move
+when the display scale changes. Blank pixels (NaN/inf) read as a dash rather
+than as a number, and colour frames report one sample per channel.
+
+The readout is always available: it needs no configuration, adds no panel, and
+does no work at all until the cursor is over a frame. It sits beside the status
+messages rather than replacing them, so neither overwrites the other.
+
+A frame is usually shown smaller than it is, in which case several data pixels
+share one screen pixel and the readout names one of them. It always names the
+pixel whose count it shows.
+
+While a live stream is running, the readout re-reads the hovered pixel as each
+frame arrives, so resting the cursor on one pixel shows its counts changing.
+When tiling, it reports whichever tile the cursor is over, prefixed with that
+frame's name, which need not be the current frame.
+
 ## Statistics
 
 The **statistics** tool adds a dock panel summarising the current frame's pixel

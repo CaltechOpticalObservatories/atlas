@@ -1,4 +1,5 @@
 # Standard Library Imports
+import math
 from dataclasses import dataclass
 
 # Third-Party Library Imports
@@ -70,3 +71,13 @@ def compute_statistics(data):
         median=float(np.median(values)),
         deviation=float(values.std()),
     )
+
+
+def format_count(value):
+    """Formats a pixel value for display, without inventing precision."""
+    if math.isnan(value):
+        return "—"
+    if float(value).is_integer():
+        # Detector counts are integers; 59983.000 would just be noise.
+        return f"{int(value):,}"
+    return f"{value:,.3f}"
