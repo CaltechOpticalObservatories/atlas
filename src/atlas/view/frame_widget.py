@@ -3,6 +3,8 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 
+from atlas.model.pixel import locate_pixel
+
 
 class FrameWidget(QWidget):
     """
@@ -14,11 +16,17 @@ class FrameWidget(QWidget):
     """
 
     clicked = pyqtSignal()
+    # (frame, column, row) for the pixel under the cursor, or None when the
+    # cursor is on this tile but not on a pixel of it.
+    hovered = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.frame = None
         self.is_current = False
+        # Without tracking, Qt only delivers moves while a button is held, and
+        # a readout that needs a drag to update is not a hover readout.
+        self.setMouseTracking(True)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
@@ -26,6 +34,7 @@ class FrameWidget(QWidget):
         self.setLayout(layout)
 
         self.caption = QLabel()
+        self.caption.setMouseTracking(True)
         self.caption.setAlignment(Qt.AlignCenter)
         self.caption.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         font = self.caption.font()
@@ -85,7 +94,47 @@ class FrameWidget(QWidget):
         super().resizeEvent(event)
         self.rescale()
 
+    def pixel_at(self, position):
+        """
+        The data index under a point in this widget's coordinates.
+
+        Returns:
+            tuple: (column, row), 0-based, or None when the point is not on
+            the image.
+        """
+        if self.frame is None or self.frame.pixmap is None:
+            return None
+
+        displayed = self.image.pixmap()
+        if displayed is None or displayed.isNull():
+            return None
+
+        # The unscaled pixmap was rendered from the display plane, so its size
+        # is the shape of the data the index has to land in.
+        point = self.image.mapFrom(self, position)
+        return locate_pixel((point.x(), point.y()),
+                            (self.image.width(), self.image.height()),
+                            (displayed.width(), displayed.height()),
+                            (self.frame.pixmap.width(), self.frame.pixmap.height()))
+
     def mousePressEvent(self, event):  # pylint: disable=invalid-name
         """Qt override: clicking a frame makes it current."""
         super().mousePressEvent(event)
         self.clicked.emit()
+
+    def mouseMoveEvent(self, event):  # pylint: disable=invalid-name
+        """
+        Qt override: report the pixel under the cursor as it moves.
+
+        The child labels ignore mouse moves, so Qt propagates them here with
+        the position already translated into this widget's coordinates. That is
+        also how clicks on the image reach mousePressEvent above.
+        """
+        super().mouseMoveEvent(event)
+        index = self.pixel_at(event.pos())
+        self.hovered.emit(None if index is None else (self.frame, *index))
+
+    def leaveEvent(self, event):  # pylint: disable=invalid-name
+        """Qt override: the cursor is off this tile, so it is on no pixel."""
+        super().leaveEvent(event)
+        self.hovered.emit(None)

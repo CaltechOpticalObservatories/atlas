@@ -1,12 +1,11 @@
 # Standard Library Imports
-import math
 import time
 
 # Third-Party Library Imports
 from PyQt5.QtWidgets import QDockWidget, QFormLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt, QTimer
 
-from atlas.model.statistics import compute_statistics
+from atlas.model.statistics import compute_statistics, format_count
 from .registry import Tool, register
 
 # Panel rows, in the order they are shown: title -> FrameStatistics attribute.
@@ -17,16 +16,6 @@ ROWS = (
     ("Min", "minimum"),
     ("Max", "maximum"),
 )
-
-
-def format_count(value):
-    """Formats a pixel value for display, without inventing precision."""
-    if math.isnan(value):
-        return "—"
-    if float(value).is_integer():
-        # Detector counts are integers; 59983.000 would just be noise.
-        return f"{int(value):,}"
-    return f"{value:,.3f}"
 
 
 @register("statistics")

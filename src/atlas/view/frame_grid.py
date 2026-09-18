@@ -3,8 +3,9 @@ import math
 
 # Third-Party Library Imports
 from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 
+from atlas.model.pixel import PixelReadout, read_pixel
 from .frame_widget import FrameWidget
 
 
@@ -16,10 +17,15 @@ class FrameGrid(QWidget):
     so switching frames does not flicker or lose scroll state.
     """
 
+    # A PixelReadout for the pixel under the cursor, or None when there is
+    # none. Emitted for whichever tile is hovered, not just the current frame.
+    pixel_hovered = pyqtSignal(object)
+
     def __init__(self, view_model, parent=None):
         super().__init__(parent)
         self.view_model = view_model
         self.widgets = []
+        self.hover = None  # last (frame, column, row) a tile reported
 
         self.grid = QGridLayout()
         self.grid.setContentsMargins(0, 0, 0, 0)
@@ -33,6 +39,11 @@ class FrameGrid(QWidget):
         self.view_model.frames_changed.connect(self.refresh)
         self.view_model.current_changed.connect(self.refresh)
         self.view_model.display_mode_changed.connect(self.refresh)
+        # Re-read rather than clear: under a live stream the cursor is usually
+        # still, and watching one pixel's counts change is the point of resting
+        # it there. A frame that has gone away is dropped by report_pixel.
+        self.view_model.frames_changed.connect(self.report_pixel)
+        self.view_model.current_changed.connect(self.report_pixel)
 
     def column_count(self, frame_count):
         """
@@ -52,6 +63,7 @@ class FrameGrid(QWidget):
             widget = FrameWidget(self)
             position = len(self.widgets)
             widget.clicked.connect(lambda pos=position: self.select(pos))
+            widget.hovered.connect(self.on_hover)
             self.widgets.append(widget)
         return self.widgets[index]
 
@@ -62,6 +74,43 @@ class FrameGrid(QWidget):
             frame = visible[position]
             if frame in self.view_model.frames:
                 self.view_model.set_current_index(self.view_model.frames.index(frame))
+
+    def on_hover(self, position):
+        """Records the pixel a tile reports under the cursor, and reports it on."""
+        self.hover = position
+        self.report_pixel()
+
+    def report_pixel(self, *_):
+        """
+        Emits the value of the hovered pixel, reading it afresh each time.
+
+        The index is kept rather than the value, so this is also what a frame
+        arriving under a stationary cursor goes through.
+        """
+        readout = self.current_readout()
+        if readout is None:
+            self.hover = None
+        self.pixel_hovered.emit(readout)
+
+    def current_readout(self):
+        """The hovered pixel as a PixelReadout, or None if there is no longer one."""
+        if self.hover is None:
+            return None
+
+        frame, column, row = self.hover
+        # Tiling can be switched off under the cursor, leaving a hovered frame
+        # that is no longer on screen; deleting it leaves one that is gone.
+        if frame not in self.view_model.visible_frames():
+            return None
+
+        plane = self.view_model.select_display_plane(frame.data)
+        if plane is None:
+            return None
+
+        value = read_pixel(plane, column, row)
+        if value is None:
+            return None
+        return PixelReadout(frame.label, column, row, value)
 
     def refresh(self):
         """Rebuilds the grid for the frames that should currently be visible."""

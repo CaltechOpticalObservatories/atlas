@@ -1,6 +1,7 @@
 # Third-Party Library Imports
 from PyQt5.QtWidgets import (QMainWindow, QAction, QActionGroup, QFileDialog,
-                             QDesktopWidget)
+                             QDesktopWidget, QLabel)
+from PyQt5.QtCore import Qt
 
 from atlas.features import build_tools
 from atlas.model.fits_model import SCALES
@@ -37,6 +38,7 @@ class AtlasWindow(QMainWindow):
         self.setCentralWidget(self.frame_grid)
 
         self.create_menus()
+        self.create_pixel_readout()
         self.statusBar().showMessage("Ready")
         self.view_model.message.connect(self.show_message)
         self.view_model.frames_changed.connect(self.update_frame_actions)
@@ -83,6 +85,37 @@ class AtlasWindow(QMainWindow):
 
         # Created up front so tools have somewhere to attach; hidden if empty.
         self.tools_menu = menu_bar.addMenu("Tools")
+
+    def create_pixel_readout(self):
+        """
+        Adds the hover readout to the status bar.
+        """
+        self.pixel_readout = QLabel()
+        font = self.pixel_readout.font()
+        font.setFamily("Menlo")
+        font.setStyleHint(font.Monospace)
+        self.pixel_readout.setFont(font)
+        # Worth copying out, like the figures in the statistics panel.
+        self.pixel_readout.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.statusBar().addPermanentWidget(self.pixel_readout)
+
+        self.frame_grid.pixel_hovered.connect(self.show_pixel)
+
+    def show_pixel(self, readout):
+        """
+        Shows the pixel under the cursor, or blanks the readout when there is
+        none.
+        """
+        if readout is None:
+            self.pixel_readout.clear()
+            return
+
+        text = f"({readout.x}, {readout.y})  {readout.text}"
+        if len(self.view_model.visible_frames()) > 1:
+            # Tiling puts several frames under one status bar, so the numbers
+            # have to say which one they came from.
+            text = f"{readout.label}  {text}"
+        self.pixel_readout.setText(text)
 
     def create_display_mode_actions(self):
         """Adds the single/tile display mode choice."""
