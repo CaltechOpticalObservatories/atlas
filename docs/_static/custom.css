@@ -1,0 +1,20 @@
+/* Keep the hover-readout and status-bar samples reading as fixed-width UI
+   text rather than as code the reader is meant to run. */
+.sample-readout pre {
+  font-size: 0.95rem;
+}
+
+/* Shortcut keys appear in most tables on the site; give them a little air. */
+kbd {
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--sy-c-border, #d0d7de);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+/* The landing page cards read better with even heights. */
+.sd-card {
+  height: 100%;
+}
