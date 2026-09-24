@@ -202,8 +202,9 @@ def test_live_stream_keeps_its_scale(make_window, ramp):
 
     def arrive(multiplier):
         data = (ramp * multiplier).astype(np.uint16)
-        tool.receiver.frame_received.emit(
+        tool.receiver.slot.put(
             shm_reader.ShmFrame(data=data, keywords={"FRAMENO": multiplier}))
+        tool.show_latest_frame()
         return data
 
     arrive(1)
