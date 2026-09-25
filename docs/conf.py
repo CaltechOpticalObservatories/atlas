@@ -21,6 +21,7 @@ extensions = [
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinx.ext.githubpages",
 ]
 
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
@@ -35,6 +36,7 @@ myst_enable_extensions = [
     "substitution",
 ]
 myst_heading_anchors = 3
+html_baseurl = "https://caltechopticalobservatories.github.io/atlas/"
 
 html_theme = "shibuya"
 html_static_path = ["_static"]

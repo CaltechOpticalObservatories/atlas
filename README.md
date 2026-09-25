@@ -58,7 +58,9 @@ file, or `--enable` on the command line.
 
 ## Documentation
 
-The full documentation lives in [`docs/`](docs/):
+The documentation is published at
+<https://caltechopticalobservatories.github.io/atlas/>, and its source lives
+in [`docs/`](docs/):
 
 - [Installation](docs/installation.md) and [Quickstart](docs/quickstart.md)
 - [Frames and scales](docs/frames.md)
