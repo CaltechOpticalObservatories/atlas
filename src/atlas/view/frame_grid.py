@@ -39,11 +39,9 @@ class FrameGrid(QWidget):
         self.view_model.frames_changed.connect(self.refresh)
         self.view_model.current_changed.connect(self.refresh)
         self.view_model.display_mode_changed.connect(self.refresh)
-        # Re-read rather than clear: under a live stream the cursor is usually
-        # still, and watching one pixel's counts change is the point of resting
-        # it there. A frame that has gone away is dropped by report_pixel.
         self.view_model.frames_changed.connect(self.report_pixel)
         self.view_model.current_changed.connect(self.report_pixel)
+        self.view_model.view_changed.connect(self.redraw)
 
     def column_count(self, frame_count):
         """
@@ -74,6 +72,21 @@ class FrameGrid(QWidget):
             frame = visible[position]
             if frame in self.view_model.frames:
                 self.view_model.set_current_index(self.view_model.frames.index(frame))
+
+    def redraw(self):
+        """Redraws every tile from its frame's pixmap, without relaying out."""
+        for widget in self.widgets:
+            widget.rescale()
+
+    def zoom_current_to_actual(self):
+        """
+        Zooms the current frame to one screen pixel per data pixel.
+        """
+        frame = self.view_model.current_frame
+        for widget in self.widgets:
+            if widget.frame is frame and widget.display_scale() > 0:
+                self.view_model.set_current_zoom(frame.zoom / widget.display_scale())
+                return
 
     def on_hover(self, position):
         """Records the pixel a tile reports under the cursor, and reports it on."""

@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt
 
 from atlas.features import build_tools
 from atlas.model.fits_model import SCALES
+from atlas.model.zoom import ZOOM_STEP
 from .frame_grid import FrameGrid
 
 FITS_FILTER = "FITS Files (*.fits *.fit *.fts *.fits.gz *.fz);;All Files (*)"
@@ -82,6 +83,7 @@ class AtlasWindow(QMainWindow):
         self.create_display_mode_actions()
         self.view_menu.addSeparator()
         self.create_scale_actions()
+        self.create_zoom_actions()
 
         # Created up front so tools have somewhere to attach; hidden if empty.
         self.tools_menu = menu_bar.addMenu("Tools")
@@ -116,6 +118,24 @@ class AtlasWindow(QMainWindow):
             # have to say which one they came from.
             text = f"{readout.label}  {text}"
         self.pixel_readout.setText(text)
+
+    def create_zoom_actions(self):
+        """
+        Adds the zoom commands, which apply to the current frame.
+
+        Like the scale, the zoom belongs to the frame rather than the window,
+        so tiled frames can be magnified independently of each other.
+        """
+        self.zoom_menu = self.view_menu.addMenu("Zoom")
+        self.add_action(self.zoom_menu, "Zoom In",
+                        lambda: self.view_model.zoom_current_by(ZOOM_STEP), "Ctrl++")
+        self.add_action(self.zoom_menu, "Zoom Out",
+                        lambda: self.view_model.zoom_current_by(1 / ZOOM_STEP), "Ctrl+-")
+        self.zoom_menu.addSeparator()
+        self.add_action(self.zoom_menu, "Zoom to Fit",
+                        self.view_model.zoom_current_to_fit, "Ctrl+0")
+        self.add_action(self.zoom_menu, "Actual Pixels",
+                        self.frame_grid.zoom_current_to_actual, "Ctrl+9")
 
     def create_display_mode_actions(self):
         """Adds the single/tile display mode choice."""
@@ -211,6 +231,7 @@ class AtlasWindow(QMainWindow):
 
         frame = self.view_model.current_frame
         self.sync_scale_actions(frame)
+        self.zoom_menu.setEnabled(frame is not None)
 
         title = self.config.window.title
         if frame is not None:

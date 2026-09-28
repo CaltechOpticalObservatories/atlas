@@ -1,6 +1,7 @@
 # Nothing but image display: no side panels, no tools.
 display:
   mode: single
+  zoom: 1.0
 tools:
   header: false
   histogram: false

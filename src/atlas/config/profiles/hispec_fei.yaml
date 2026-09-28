@@ -1,7 +1,7 @@
 # HISPEC FEI
 display:
   mode: single
-tools:
+  zoom: 1.0
   header: true
   histogram: true
   shm:

@@ -31,7 +31,7 @@ class PixelReadout:
         return format_count(self.value)
 
 
-def locate_pixel(point, label_size, displayed_size, source_size):
+def locate_pixel(point, label_size, displayed_size, source_size, source_origin=(0, 0)):
     """
     Maps a point on a frame's image label to an index into its data.
 
@@ -43,13 +43,16 @@ def locate_pixel(point, label_size, displayed_size, source_size):
         point (tuple): (x, y) in the image label's own coordinates.
         label_size (tuple): (width, height) of the image label.
         displayed_size (tuple): (width, height) of the scaled pixmap.
-        source_size (tuple): (width, height) of the unscaled pixmap, which is
-            also the width and height of the data being displayed.
+        source_size (tuple): (width, height) of the region of the pixmap that
+            was drawn, which is the whole pixmap until the frame is zoomed.
+        source_origin (tuple): (x, y) of that region's top-left corner in the
+            pixmap. Zooming draws a crop, so the index has to be counted from
+            the crop's corner rather than the image's.
 
     Returns:
         tuple: (column, row), 0-based, or None when the point is not on the
-        image. Everything outside the pixmap is a miss, including the label's
-        own letterboxing, which belongs to no pixel.
+        image. Everything outside the drawn region is a miss, including the
+        label's own letterboxing, which belongs to no pixel.
     """
     displayed_width, displayed_height = displayed_size
     source_width, source_height = source_size
@@ -62,8 +65,8 @@ def locate_pixel(point, label_size, displayed_size, source_size):
     if not (0 <= x < displayed_width and 0 <= y < displayed_height):
         return None
 
-    return (x * source_width // displayed_width,
-            y * source_height // displayed_height)
+    return (source_origin[0] + x * source_width // displayed_width,
+            source_origin[1] + y * source_height // displayed_height)
 
 
 def read_pixel(plane, column, row):

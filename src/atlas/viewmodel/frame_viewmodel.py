@@ -8,6 +8,7 @@ from PyQt5.QtGui import QPixmap
 
 from atlas.model.fits_model import FITSModel, SCALES
 from atlas.model.frame import Frame
+from atlas.model.zoom import ZOOM_FIT
 
 # FITS files are conventionally named with any of these extensions.
 FITS_EXTENSIONS = ('.fits', '.fit', '.fts', '.fits.gz', '.fit.gz', '.fts.gz', '.fz')
@@ -25,6 +26,7 @@ class FrameViewModel(QObject):
     frames_changed = pyqtSignal()
     current_changed = pyqtSignal(int)
     display_mode_changed = pyqtSignal(str)
+    view_changed = pyqtSignal()
     message = pyqtSignal(str)
 
     def __init__(self, config):
@@ -54,7 +56,7 @@ class FrameViewModel(QObject):
             self.message.emit(f"{os.path.basename(file_name)} contains no image data.")
             return None
 
-        frame = Frame(data, header, file_name)
+        frame = self.new_frame(data, header, file_name)
         frame.pixmap = self.render(data, frame.scale)
         if frame.pixmap is None:
             return None
@@ -63,6 +65,12 @@ class FrameViewModel(QObject):
         self.current_index = len(self.frames) - 1
         self.frames_changed.emit()
         self.current_changed.emit(self.current_index)
+        return frame
+
+    def new_frame(self, data, header, file_name=""):
+        """Creates a frame, opened at the zoom the configuration asks for."""
+        frame = Frame(data, header, file_name)
+        frame.zoom = self.config.display.zoom
         return frame
 
     def update_live_frame(self, data, keywords):
@@ -80,7 +88,7 @@ class FrameViewModel(QObject):
         header = fits.Header(keywords)  # header.py expects frame.header.cards
 
         if self._live_frame is None:
-            self._live_frame = Frame(data, header)
+            self._live_frame = self.new_frame(data, header)
             self._live_frame.scale = scale
             self._live_frame.pixmap = pixmap
             self.frames.append(self._live_frame)
@@ -152,6 +160,26 @@ class FrameViewModel(QObject):
         frame.scale = scale
         frame.pixmap = pixmap
         self.current_changed.emit(self.current_index)
+
+    def zoom_current_by(self, ratio):
+        """Zooms the current frame in or out by a factor, about its centre."""
+        frame = self.current_frame
+        if frame is not None and frame.set_zoom(frame.zoom * ratio):
+            self.view_changed.emit()
+
+    def set_current_zoom(self, factor):
+        """Zooms the current frame to a factor relative to fitting its tile."""
+        frame = self.current_frame
+        if frame is not None and frame.set_zoom(factor):
+            self.view_changed.emit()
+
+    def zoom_current_to_fit(self):
+        """Puts the whole of the current frame back in its tile, centred."""
+        frame = self.current_frame
+        if frame is not None:
+            frame.zoom = ZOOM_FIT
+            frame.center = None
+            self.view_changed.emit()
 
     def select_display_plane(self, data):
         """

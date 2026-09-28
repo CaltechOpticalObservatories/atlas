@@ -1,4 +1,4 @@
-# Frames and scales
+# Frames, scales and zoom
 
 ## Frames
 
@@ -26,6 +26,42 @@ atlas *.fits --mode tile --tile-columns 1
 roughly square arrangement from however many frames are open, which is usually
 what you want; fixing it to `1` gives a single column, which is how the
 `detector` profile stacks a signal frame above its reset frame.
+
+(zoom)=
+## Zoom
+
+**View → Zoom** magnifies the current frame. Like the scale, the zoom belongs
+to the frame rather than to the window, so in `tile` mode one image can be
+zoomed into a corner while its neighbour still shows the whole field.
+
+| Command | What it does | Shortcut |
+| --- | --- | --- |
+| Zoom In | Doubles the magnification | <kbd>Ctrl</kbd>+<kbd>+</kbd> |
+| Zoom Out | Halves it | <kbd>Ctrl</kbd>+<kbd>-</kbd> |
+| Zoom to Fit | The whole frame in its tile, centred | <kbd>Ctrl</kbd>+<kbd>0</kbd> |
+| Actual Pixels | One screen pixel per data pixel | <kbd>Ctrl</kbd>+<kbd>9</kbd> |
+
+The mouse does the same thing more directly: turn the wheel over the image to
+zoom about the pixel under the pointer, and drag with the left button to pan a
+frame that no longer fits in its tile.
+
+Frames open fitted to their tile. A configuration can start them magnified
+instead, which saves repeating the same keystrokes every session on a detector
+nobody looks at whole:
+
+```yaml
+display:
+  zoom: 4.0      # 1.0 fits the frame to its tile
+```
+
+Every bundled profile sets it explicitly, so a profile copied as a starting
+point already has the key to edit. It is where new frames *start*, not a floor:
+**Zoom to Fit** still shows the whole frame.
+
+A zoom survives everything that does not change the frame: resizing the window,
+tiling and untiling, switching scale, and the next image of a
+[live stream](live.md), so a detector corner stays under the eye exposure after
+exposure.
 
 ## Scales
 

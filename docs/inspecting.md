@@ -30,7 +30,8 @@ than as a number, and colour frames report one sample per channel.
 
 A frame is usually shown smaller than it is, in which case several data pixels
 share one screen pixel and the readout names one of them. It always names the
-pixel whose count it shows.
+pixel whose count it shows. [Zooming in](frames.md#zoom) past 1:1 separates
+them, so every pixel becomes a block you can point at individually.
 
 The readout is always available: it needs no configuration, adds no panel, and
 does no work at all until the cursor is over a frame. It sits beside the status
