@@ -1,0 +1,17 @@
+# HISPEC FEI
+display:
+  mode: single
+tools:
+  header: true
+  histogram: true
+  shm:
+    enabled: true
+    segment_name: hispec_tracking_camera
+    # Empty lets ImageStreamIO's own chain resolve the directory: MILK_SHM_DIR,
+    # then /milk/shm, then /tmp. Set it here to pin which file gets opened,
+    # since that fallback will happily find a stale segment.
+    shm_dir: ""
+    display_fps_cap: 15.0
+  statistics:
+    enabled: true
+    update_hz: 2.0

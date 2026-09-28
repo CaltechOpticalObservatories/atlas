@@ -51,6 +51,9 @@ def install_synthetic_producer():
     shm_reader.attach = fake_attach
     shm_reader.wait_for_frame = fake_wait_for_frame
     shm_reader.close = fake_close
+    # The reader thread rechecks this whenever a wait times out.
+    shm_reader.segment_replaced = lambda _image: False
+    shm_reader.segment_path = lambda _image: "synthetic-demo"
 
 
 def main():

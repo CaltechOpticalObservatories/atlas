@@ -57,6 +57,8 @@ class _Handle:
     mm: mmap.mmap
     fd: int
     data_offset: int
+    path: str
+    ident: tuple
 
 
 def _round_up_8(value):
@@ -82,15 +84,35 @@ def attach(segment_name, shm_dir=""):
         raise RuntimeError(f'could not open segment "{segment_name}": {error}') from error
 
     try:
-        size = os.fstat(fd).st_size
-        if size < _METADATA_SIZE:
+        info = os.fstat(fd)
+        if info.st_size < _METADATA_SIZE:
             raise RuntimeError(f'segment "{segment_name}" is smaller than a valid header')
-        mm = mmap.mmap(fd, size, prot=mmap.PROT_READ)
+        mm = mmap.mmap(fd, info.st_size, prot=mmap.PROT_READ)
     except Exception:
         os.close(fd)
         raise
 
-    return _Handle(mm=mm, fd=fd, data_offset=_round_up_8(_METADATA_SIZE))
+    return _Handle(mm=mm, fd=fd, data_offset=_round_up_8(_METADATA_SIZE),
+                   path=path, ident=(info.st_dev, info.st_ino))
+
+
+def segment_path(handle):
+    """The file this handle is mapped to."""
+    return handle.path
+
+
+def segment_replaced(handle):
+    """
+    True once the segment file has been unlinked or recreated since attaching.
+
+    ImageStreamIO_createIm unlinks and recreates <name>.im.shm, so a producer
+    restart leaves an existing handle mapped to an orphaned inode.
+    """
+    try:
+        info = os.stat(handle.path)
+    except OSError:
+        return True
+    return (info.st_dev, info.st_ino) != handle.ident
 
 
 def _read_cnt0(mm):
