@@ -34,7 +34,7 @@ Open your first image and find your way around the window in five minutes.
 :link: frames
 :link-type: doc
 
-Frames, single and tiled layouts, and the linear and log intensity scales.
+Frames, single and tiled layouts, intensity scales, and zooming.
 :::
 
 :::{grid-item-card} {octicon}`graph` Inspecting pixels

@@ -39,6 +39,7 @@ window:
 display:
   mode: single              # single | tile
   tile_columns: null        # null picks a roughly square grid
+  zoom: 1.0                 # 1.0 fits each new frame to its tile
 
 tools:
   header: true              # FITS header panel
@@ -95,6 +96,7 @@ the defaults for its other keys.
 | --- | --- | --- | --- |
 | `mode` | `single` or `tile` | `single` | See [](frames) |
 | `tile_columns` | integer or `null` | `null` | Positive; `null` picks a square-ish grid |
+| `zoom` | number | `1.0` | 0.015625 to 512; the zoom new frames open at, see [](frames.md#zoom) |
 
 ### `tools.header`
 

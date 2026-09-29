@@ -2,6 +2,8 @@
 import itertools
 import os
 
+from .zoom import ZOOM_FIT, clamp_zoom
+
 
 class Frame:
     """
@@ -9,7 +11,8 @@ class Frame:
 
     A frame owns its data, header and rendered pixmap. Display state that is
     per-image rather than per-window (zoom, scale, colormap) belongs here too
-    as those features arrive.
+    as those features arrive, so tiled frames can be zoomed and scaled
+    independently of each other.
     """
 
     _ids = itertools.count(1)
@@ -21,6 +24,22 @@ class Frame:
         self.file_name = file_name
         self.pixmap = None
         self.scale = "linear"
+        self.zoom = ZOOM_FIT
+        self.center = None
+
+    def set_zoom(self, factor):
+        """
+        Zooms to a factor relative to the fit.
+
+        Returns:
+            bool: True when the frame's view actually changed, so a caller
+            can avoid repainting for a zoom that was already at the limit.
+        """
+        factor = clamp_zoom(factor)
+        if factor == self.zoom:
+            return False
+        self.zoom = factor
+        return True
 
     @property
     def label(self):

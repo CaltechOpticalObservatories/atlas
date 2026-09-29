@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Optional
 
+from atlas.model.zoom import ZOOM_FIT, ZOOM_MAX, ZOOM_MIN
+
 
 class ConfigError(ValueError):
     """Raised when a configuration file or command-line override is not valid."""
@@ -28,10 +30,11 @@ class WindowConfig:
 
 @dataclass
 class DisplayConfig:
-    """How loaded frames are laid out."""
+    """How loaded frames are laid out, and how far into them they open."""
     mode: str = "single"
-    # None means "choose a roughly square grid from the frame count".
     tile_columns: Optional[int] = None
+    # The zoom every new frame starts at, relative to fitting its tile
+    zoom: float = ZOOM_FIT
 
     def validate(self, path):
         if self.mode not in DISPLAY_MODES:
@@ -42,6 +45,11 @@ class DisplayConfig:
                 raise ConfigError(
                     f"{path}.tile_columns must be a positive integer or null, "
                     f"got {self.tile_columns!r}")
+        if (isinstance(self.zoom, bool) or not isinstance(self.zoom, (int, float))
+                or not ZOOM_MIN <= self.zoom <= ZOOM_MAX):
+            raise ConfigError(
+                f"{path}.zoom must be a number between {ZOOM_MIN} and "
+                f"{ZOOM_MAX:g}, got {self.zoom!r}")
 
 
 @dataclass

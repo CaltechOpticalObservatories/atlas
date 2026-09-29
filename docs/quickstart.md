@@ -28,7 +28,7 @@ every FITS file in a folder.
 | The image area | One frame, or a grid of tiles in `tile` mode |
 | **File** menu | Opening images and directories, quitting |
 | **Frame** menu | Moving between frames, deleting them |
-| **View** menu | Single vs tile layout, intensity scale, panel visibility |
+| **View** menu | Single vs tile layout, intensity scale, zoom, panel visibility |
 | **Tools** menu | Whatever optional tools your configuration switched on |
 | Status bar, left | Messages, such as errors from a tool |
 | Status bar, right | The [hover readout](inspecting.md#hover-readout) |
@@ -47,6 +47,8 @@ header panel is opt-in. See [](configuration) for how to turn them on.
 | <kbd>Ctrl</kbd>+<kbd>[</kbd> | Previous frame |
 | <kbd>Ctrl</kbd>+<kbd>3</kbd> | Linear scale |
 | <kbd>Ctrl</kbd>+<kbd>4</kbd> | Log scale |
+| <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> | Zoom in and out |
+| <kbd>Ctrl</kbd>+<kbd>0</kbd> | Fit the frame to its tile |
 | <kbd>Ctrl</kbd>+<kbd>W</kbd> | Close the current frame |
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Quit |
 
@@ -94,6 +96,6 @@ own YAML file and pass `--config`; [](configuration) covers the format.
 
 ## Next steps
 
-- [](frames) for frames, layouts, and intensity scales
+- [](frames) for frames, layouts, intensity scales, and zooming
 - [](inspecting) for reading pixel values and summary statistics
 - [](live) for following a detector in real time
