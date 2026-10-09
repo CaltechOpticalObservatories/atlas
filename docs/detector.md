@@ -79,10 +79,17 @@ tools:
     enabled: true
     address: tcp://localhost:5555
     socket_type: SUB
+  statistics:
+    enabled: true         # frame and region statistics
+    update_hz: 2.0
   shm:
     enabled: false        # off until verified against a real segment
     segment_name: hispec_tracking_camera
 ```
+
+The statistics panel is on so that a box Shift+dragged across a frame, a bad
+column or a hot corner say, can be summarised beside the whole frame; see
+[](inspecting.md#regions).
 
 Note that `shm` is present but disabled in the shipped profile. Turn it on for
 a session with `atlas --profile detector --enable shm`, or copy the profile

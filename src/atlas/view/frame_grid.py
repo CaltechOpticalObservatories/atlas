@@ -42,6 +42,7 @@ class FrameGrid(QWidget):
         self.view_model.frames_changed.connect(self.report_pixel)
         self.view_model.current_changed.connect(self.report_pixel)
         self.view_model.view_changed.connect(self.redraw)
+        self.view_model.region_changed.connect(self.redraw_regions)
 
     def column_count(self, frame_count):
         """
@@ -62,6 +63,8 @@ class FrameGrid(QWidget):
             position = len(self.widgets)
             widget.clicked.connect(lambda pos=position: self.select(pos))
             widget.hovered.connect(self.on_hover)
+            widget.region_drawn.connect(
+                lambda region, w=widget: self.view_model.set_region(w.frame, region))
             self.widgets.append(widget)
         return self.widgets[index]
 
@@ -77,6 +80,11 @@ class FrameGrid(QWidget):
         """Redraws every tile from its frame's pixmap, without relaying out."""
         for widget in self.widgets:
             widget.rescale()
+
+    def redraw_regions(self):
+        """Redraws every tile's region, without rescaling its image."""
+        for widget in self.widgets:
+            widget.draw_overlay()
 
     def zoom_current_to_actual(self):
         """

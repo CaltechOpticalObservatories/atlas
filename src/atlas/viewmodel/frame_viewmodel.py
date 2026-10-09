@@ -27,6 +27,7 @@ class FrameViewModel(QObject):
     current_changed = pyqtSignal(int)
     display_mode_changed = pyqtSignal(str)
     view_changed = pyqtSignal()
+    region_changed = pyqtSignal()
     message = pyqtSignal(str)
 
     def __init__(self, config):
@@ -180,6 +181,18 @@ class FrameViewModel(QObject):
             frame.zoom = ZOOM_FIT
             frame.center = None
             self.view_changed.emit()
+
+    def set_region(self, frame, region):
+        """
+        Sets a frame's region of interest, or clears it when given None.
+
+        The region belongs to the frame like its zoom does, so it survives
+        switching away and back, and each new image of a live stream.
+        """
+        if frame is None or frame not in self.frames or frame.region == region:
+            return
+        frame.region = region
+        self.region_changed.emit()
 
     def select_display_plane(self, data):
         """

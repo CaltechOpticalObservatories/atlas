@@ -31,7 +31,9 @@ class PixelReadout:
         return format_count(self.value)
 
 
-def locate_pixel(point, label_size, displayed_size, source_size, source_origin=(0, 0)):
+# pylint: disable-next=too-many-arguments
+def locate_pixel(point, label_size, displayed_size, source_size,
+                 source_origin=(0, 0), *, clamp=False):
     """
     Maps a point on a frame's image label to an index into its data.
 
@@ -48,6 +50,9 @@ def locate_pixel(point, label_size, displayed_size, source_size, source_origin=(
         source_origin (tuple): (x, y) of that region's top-left corner in the
             pixmap. Zooming draws a crop, so the index has to be counted from
             the crop's corner rather than the image's.
+        clamp (bool): report the nearest drawn pixel for a point off the
+            image instead of None, which is what a drag wants once it runs
+            past the edge.
 
     Returns:
         tuple: (column, row), 0-based, or None when the point is not on the
@@ -62,6 +67,9 @@ def locate_pixel(point, label_size, displayed_size, source_size, source_origin=(
     # A QLabel centres its pixmap, so half the unused space precedes it.
     x = point[0] - (label_size[0] - displayed_width) // 2
     y = point[1] - (label_size[1] - displayed_height) // 2
+    if clamp:
+        x = max(0, min(displayed_width - 1, x))
+        y = max(0, min(displayed_height - 1, y))
     if not (0 <= x < displayed_width and 0 <= y < displayed_height):
         return None
 

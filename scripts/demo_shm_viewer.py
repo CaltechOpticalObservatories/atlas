@@ -5,12 +5,15 @@ a Linux environment ImageStreamIOWrap can build on (see
 plans/ATLAS-SHM-VIEWER-PLAN.md). Run directly, not via pytest.
 
 Usage:
-    python scripts/demo_shm_viewer.py [fits_file]
+    python scripts/demo_shm_viewer.py [--profile NAME] [fits_file]
 
 Optionally pass a FITS file to load alongside the live view (tile mode),
-e.g. one written by a real camerad + emulator run.
+e.g. one written by a real camerad + emulator run. --profile starts from a
+bundled profile instead of the defaults, so its tools and layout can be tried
+against the live feed; the feed itself is always switched on.
 """
 
+import argparse
 import math
 import sys
 import time
@@ -19,6 +22,7 @@ from PyQt5.QtWidgets import QApplication
 import numpy as np
 
 from atlas.features import shm_reader
+from atlas.config.loader import available_profiles, load_config
 from atlas.config.schema import AtlasConfig
 from atlas.viewmodel.frame_viewmodel import FrameViewModel
 from atlas.view.main_window import AtlasWindow
@@ -58,13 +62,23 @@ def install_synthetic_producer():
 
 def main():
     """Launches atlas with the synthetic SHM feed connected."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("fits_file", nargs="?",
+                        help="a FITS file to load beside the live view")
+    parser.add_argument("-p", "--profile", choices=available_profiles(),
+                        help="start from a bundled profile instead of the defaults")
+    args = parser.parse_args()
+
     install_synthetic_producer()
 
-    config = AtlasConfig()
+    if args.profile:
+        config = load_config(profile=args.profile)
+    else:
+        config = AtlasConfig()
+        config.tools.header = True
+        config.display.mode = "tile"
     config.tools.shm.enabled = True
     config.tools.shm.segment_name = "synthetic-demo"
-    config.tools.header = True
-    config.display.mode = "tile"
 
     app = QApplication(sys.argv[:1])
     view_model = FrameViewModel(config)
@@ -72,8 +86,8 @@ def main():
     window.resize(900, 550)
     window.show()
 
-    if len(sys.argv) > 1:
-        view_model.load_file(sys.argv[1])
+    if args.fits_file:
+        view_model.load_file(args.fits_file)
 
     window.tools["shm"].connect_to_shm()
 

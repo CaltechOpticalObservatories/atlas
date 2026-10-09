@@ -132,4 +132,11 @@ PYTHONPATH=src python scripts/demo_shm_viewer.py
 ```
 
 Pass a FITS file as an argument to load it alongside the live view in tile
-mode. This is a manual demo, not a test; pytest does not pick it up.
+mode. To try a bundled profile's tools and layout against the feed, name it
+with `--profile`; the feed is switched on whatever the profile says:
+
+```sh
+PYTHONPATH=src python scripts/demo_shm_viewer.py --profile hispec_fei
+```
+
+This is a manual demo, not a test; pytest does not pick it up.

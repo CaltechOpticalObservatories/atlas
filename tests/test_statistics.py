@@ -23,6 +23,7 @@ from atlas.config.schema import (AtlasConfig, ConfigError, StatisticsConfig,
 from atlas.features import statistics as statistics_tool
 from atlas.features.statistics import format_count
 from atlas.model.frame import Frame
+from atlas.model.region import Region
 from atlas.model.statistics import compute_statistics
 
 # Fast enough to keep the suite short, slow enough that a burst is throttled.
@@ -151,7 +152,7 @@ def test_panel_reports_the_current_frame(panel, qapp, noisy):
 
     expected = compute_statistics(noisy)
     assert tool.values["mean"].text() == format_count(expected.mean)
-    assert "blank" in tool.pixel_label.text()
+    assert tool.values["blank"].text() == "2"
 
 
 def test_statistics_ignore_the_display_scale(panel, qapp, noisy):
@@ -227,3 +228,39 @@ def test_hidden_panel_skips_work_and_catches_up(panel, qapp, count_computations)
     qapp.processEvents()
     assert count_computations["n"] == 1, "showing the panel should catch up once"
     assert tool.values["mean"].text() == format_count(1234.0)
+
+
+def test_panel_layout_does_not_move_as_figures_change(make_window, qapp):
+    """
+    Filling the panel in must not resize it, or the image beside it.
+
+    A label sized to its text widens with every longer figure, and the dock
+    and the tile next to it follow, so the whole window jumps as numbers
+    arrive. Wide values, blanks and a region are the worst case.
+    """
+    config = AtlasConfig(tools=ToolsConfig(
+        header=False, statistics=StatisticsConfig(enabled=True)))
+    window, view_model = make_window(config, show=True)
+    tool = window.tools["statistics"]
+
+    def geometry():
+        qapp.processEvents()
+        widget = window.frame_grid.widgets[0] if window.frame_grid.widgets else None
+        return (tool.dock.width(), [label.x() for label in tool.values.values()],
+                [label.x() for label in tool.region_values.values()],
+                None if widget is None else widget.image.width())
+
+    small = np.full((64, 64), 5.0, dtype=np.float32)
+    view_model.update_live_frame(small, {})
+    before = geometry()
+
+    wide = np.random.default_rng(5).normal(30000, 5000, (64, 64)).astype(np.float32)
+    wide[:4, :4] = np.nan
+    view_model.update_live_frame(wide, {})
+    tool.recompute()
+    view_model.set_region(view_model.current_frame, Region(1, 1, 60, 60))
+    assert tool.values["blank"].text() == "16"
+    assert geometry() == before, "the panel or the tile moved as the figures changed"
+
+    view_model.set_region(view_model.current_frame, None)
+    assert geometry() == before, "clearing the region moved the panel"
