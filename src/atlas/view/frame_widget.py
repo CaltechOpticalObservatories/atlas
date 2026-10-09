@@ -1,10 +1,14 @@
 # Third-Party Library Imports
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent, QRect, QSize
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QColor, QPainter, QPen, QPixmap
 
 from atlas.model.pixel import locate_pixel
+from atlas.model.region import Region, region_on_screen
 from atlas.model.zoom import WHEEL_STEP, anchored_center, visible_region
+
+# DS9's default region colour: it stays visible on any grey level.
+REGION_COLOUR = QColor("#00ff00")
 
 
 class FrameWidget(QWidget):
@@ -20,6 +24,9 @@ class FrameWidget(QWidget):
     # (frame, column, row) for the pixel under the cursor, or None when the
     # cursor is on this tile but not on a pixel of it.
     hovered = pyqtSignal(object)
+    # A Region the user has just finished drawing, or None for a shift-click
+    # that drew nothing, which clears the frame's region.
+    region_drawn = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -27,6 +34,9 @@ class FrameWidget(QWidget):
         self.is_current = False
         self.region = None
         self.drag = None  # where a pan was last seen
+        self.scaled = None  # the drawn crop, before the region goes on it
+        self.anchor = None  # the pixel a region drag began on
+        self.sketch = None  # the Region being dragged out, not yet committed
         self.setMouseTracking(True)
 
         layout = QVBoxLayout()
@@ -63,6 +73,8 @@ class FrameWidget(QWidget):
             self.caption.setText("")
             self.image.setPixmap(QPixmap())
             self.region = None
+            self.scaled = None
+            self.anchor = self.sketch = None
             return
 
         self.caption.setText(frame.label)
@@ -85,6 +97,7 @@ class FrameWidget(QWidget):
         Draws whatever the frame's zoom and pan currently select.
         """
         self.region = None
+        self.scaled = None
         if self.frame is None or self.frame.pixmap is None:
             return
 
@@ -101,9 +114,37 @@ class FrameWidget(QWidget):
 
         # Nearest neighbour as soon as a data pixel covers more than a screen pixel
         mode = Qt.FastTransformation if scale >= 1 else Qt.SmoothTransformation
-        self.image.setPixmap(source.copy(QRect(x, y, width, height)).scaled(
+        self.scaled = source.copy(QRect(x, y, width, height)).scaled(
             QSize(round(width * scale), round(height * scale)),
-            Qt.KeepAspectRatio, mode))
+            Qt.KeepAspectRatio, mode)
+        self.draw_overlay()
+
+    def draw_overlay(self):
+        """
+        Puts the frame's region, or the one being dragged out, on the image.
+
+        Drawn onto a copy of the scaled crop rather than into it, so a region
+        moving under the mouse costs a copy per move rather than a rescale.
+        """
+        if self.scaled is None:
+            return
+
+        box = self.sketch or self.frame.region
+        if box is None:
+            self.image.setPixmap(self.scaled)
+            return
+
+        # self.region is the part of the frame on screen, not the box
+        pixmap = self.scaled.copy()
+        left, top, width, height = region_on_screen(
+            box, self.region[:4], (pixmap.width(), pixmap.height()))
+        painter = QPainter(pixmap)
+        # Dashed until the drag ends, so a box still being drawn reads as such.
+        pen = QPen(REGION_COLOUR, 0, Qt.DashLine if self.sketch else Qt.SolidLine)
+        painter.setPen(pen)
+        painter.drawRect(QRect(left, top, width, height).adjusted(0, 0, -1, -1))
+        painter.end()
+        self.image.setPixmap(pixmap)
 
     def display_scale(self):
         """Screen pixels per data pixel as drawn, or 0 when nothing is drawn."""
@@ -148,9 +189,14 @@ class FrameWidget(QWidget):
         super().resizeEvent(event)
         self.rescale()
 
-    def pixel_at(self, position):
+    def pixel_at(self, position, clamp=False):
         """
         The data index under a point in this widget's coordinates.
+
+        Args:
+            position (QPoint): the point, in this widget's coordinates.
+            clamp (bool): report the nearest pixel on the image for a point
+                beside it, rather than None.
 
         Returns:
             tuple: (column, row), 0-based, or None when the point is not on
@@ -169,22 +215,41 @@ class FrameWidget(QWidget):
         return locate_pixel((point.x(), point.y()),
                             (self.image.width(), self.image.height()),
                             (displayed.width(), displayed.height()),
-                            (width, height), (x, y))
+                            (width, height), (x, y), clamp=clamp)
 
     def mousePressEvent(self, event):  # pylint: disable=invalid-name
-        """Qt override: clicking a frame makes it current, and begins a pan."""
+        """
+        Qt override: clicking a frame makes it current, and begins a pan, or
+        with Shift held, a region.
+        """
         super().mousePressEvent(event)
-        self.drag = event.pos() if event.button() == Qt.LeftButton else None
+        self.drag = self.anchor = self.sketch = None
+        if event.button() == Qt.LeftButton:
+            if event.modifiers() & Qt.ShiftModifier:
+                # A region has to start on a pixel; it may then run off the edge.
+                self.anchor = self.pixel_at(event.pos())
+            else:
+                self.drag = event.pos()
         self.clicked.emit()
 
     def mouseReleaseEvent(self, event):  # pylint: disable=invalid-name
-        """Qt override: the pan lasts as long as the button is held."""
+        """Qt override: a pan or region drag lasts as long as the button is held."""
         super().mouseReleaseEvent(event)
         self.drag = None
+        if self.anchor is None:
+            return
+
+        # A shift-click that never left its pixel drew nothing, and clears.
+        region = self.sketch
+        if region is not None and region.width == region.height == 1:
+            region = None
+        self.anchor = self.sketch = None
+        self.draw_overlay()
+        self.region_drawn.emit(region)
 
     def mouseMoveEvent(self, event):  # pylint: disable=invalid-name
         """
-        Qt override: drag to pan, and report the pixel under the cursor.
+        Qt override: drag to pan or draw, and report the pixel under the cursor.
 
         The child labels ignore mouse moves, so Qt propagates them here with
         the position already translated into this widget's coordinates. That is
@@ -195,6 +260,11 @@ class FrameWidget(QWidget):
             delta = event.pos() - self.drag
             if self.pan_by(delta.x(), delta.y()):
                 self.drag = event.pos()
+        elif self.anchor is not None and event.buttons() & Qt.LeftButton:
+            corner = self.pixel_at(event.pos(), clamp=True)
+            if corner is not None:
+                self.sketch = Region.from_corners(self.anchor, corner)
+                self.draw_overlay()
 
         index = self.pixel_at(event.pos())
         self.hovered.emit(None if index is None else (self.frame, *index))

@@ -13,6 +13,7 @@ tools:
     # since that fallback will happily find a stale segment.
     shm_dir: ""
     display_fps_cap: 15.0
+  # Frame and region statistics: Shift+drag a box to summarise it
   statistics:
     enabled: true
     update_hz: 2.0

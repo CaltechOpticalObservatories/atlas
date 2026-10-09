@@ -14,6 +14,10 @@ tools:
     enabled: true
     address: tcp://localhost:5555
     socket_type: SUB
+  # Frame and region statistics: Shift+drag a box to summarise it
+  statistics:
+    enabled: true
+    update_hz: 2.0
   # Disabled until verified against a real segment
   shm:
     enabled: false

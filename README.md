@@ -48,7 +48,7 @@ bundled profiles.
 | **Scales** | Linear or log, per frame rather than per window |
 | **Hover readout** | Pixel index and raw count in the status bar, always on |
 | **Header panel** | The current frame's FITS header, on by default |
-| **Statistics** | Mean, median, standard deviation, min, max, pixel count |
+| **Statistics** | Mean, median, standard deviation, variance, min, max, flux-weighted centroid, pixel count, for the frame and a Shift+drag region |
 | **Histograms** | Pixel-value distributions for every frame on screen |
 | **Live streams** | Follow a detector over ImageStreamIO shared memory or ZMQ |
 | **Tap subtraction** | COO detector signal and reset taps |

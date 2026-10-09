@@ -41,7 +41,7 @@ Frames, single and tiled layouts, intensity scales, and zooming.
 :link: inspecting
 :link-type: doc
 
-The hover readout, the statistics panel, headers, and histograms.
+The hover readout, frame and region statistics, headers, and histograms.
 :::
 
 :::{grid-item-card} {octicon}`broadcast` Live streams

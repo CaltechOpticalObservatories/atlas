@@ -10,8 +10,8 @@ class Frame:
     One loaded image, following the frame concept from SAOImage DS9.
 
     A frame owns its data, header and rendered pixmap. Display state that is
-    per-image rather than per-window (zoom, scale, colormap) belongs here too
-    as those features arrive, so tiled frames can be zoomed and scaled
+    per-image rather than per-window (zoom, scale, colormap, region) belongs
+    here too as those features arrive, so tiled frames can be zoomed and scaled
     independently of each other.
     """
 
@@ -26,6 +26,7 @@ class Frame:
         self.scale = "linear"
         self.zoom = ZOOM_FIT
         self.center = None
+        self.region = None  # a Region of interest, in data pixels
 
     def set_zoom(self, factor):
         """

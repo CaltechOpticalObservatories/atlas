@@ -156,7 +156,7 @@ See [](live.md#shared-memory).
 | --- | --- |
 | `minimal` | Image display only: no panels, no tools |
 | `viewer` | General FITS viewing: headers and histograms |
-| `detector` | COO detector work: tiled frames, tap subtraction, ZMQ |
+| `detector` | COO detector work: tiled frames, tap subtraction, ZMQ, statistics |
 
 `atlas --list-profiles` prints them. The YAML lives in
 `src/atlas/config/profiles/`, which is a good place to look when writing your

@@ -43,7 +43,8 @@ zoomed into a corner while its neighbour still shows the whole field.
 
 The mouse does the same thing more directly: turn the wheel over the image to
 zoom about the pixel under the pointer, and drag with the left button to pan a
-frame that no longer fits in its tile.
+frame that no longer fits in its tile. Holding <kbd>Shift</kbd> while dragging
+draws a [region](inspecting.md#regions) instead of panning.
 
 Frames open fitted to their tile. A configuration can start them magnified
 instead, which saves repeating the same keystrokes every session on a detector

@@ -44,6 +44,7 @@ class AtlasWindow(QMainWindow):
         self.view_model.message.connect(self.show_message)
         self.view_model.frames_changed.connect(self.update_frame_actions)
         self.view_model.current_changed.connect(self.update_frame_actions)
+        self.view_model.region_changed.connect(self.update_frame_actions)
 
         # Tools are built last so they can append to menus that already exist.
         self.tools = build_tools(self, config.tools)
@@ -78,6 +79,11 @@ class AtlasWindow(QMainWindow):
             self.frame_menu, "Delete Frame", self.view_model.delete_current_frame, "Ctrl+W")
         self.delete_all_action = self.add_action(
             self.frame_menu, "Delete All Frames", self.view_model.delete_all_frames)
+        self.frame_menu.addSeparator()
+        # Regions are drawn with Shift+drag; this is the way to remove one.
+        self.clear_region_action = self.add_action(
+            self.frame_menu, "Clear Region",
+            lambda: self.view_model.set_region(self.view_model.current_frame, None))
 
         self.view_menu = menu_bar.addMenu("View")
         self.create_display_mode_actions()
@@ -230,6 +236,7 @@ class AtlasWindow(QMainWindow):
             action.setEnabled(count > 1)
 
         frame = self.view_model.current_frame
+        self.clear_region_action.setEnabled(frame is not None and frame.region is not None)
         self.sync_scale_actions(frame)
         self.zoom_menu.setEnabled(frame is not None)
 
