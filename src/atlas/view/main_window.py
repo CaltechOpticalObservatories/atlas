@@ -1,3 +1,7 @@
+# Standard Library Imports
+from datetime import datetime, timezone
+import os
+
 # Third-Party Library Imports
 from PyQt5.QtWidgets import (QMainWindow, QAction, QActionGroup, QFileDialog,
                              QDesktopWidget, QLabel)
@@ -15,6 +19,27 @@ SCALE_TITLES = {
 }
 
 
+
+def next_save_path(root, when):
+    """
+    Path for a frame saved at `when`: root/<date>/<date>_<time>.fits, in UTC,
+    creating the day's directory.
+
+    Nothing asks before a save, so nothing confirms an overwrite either: a
+    second save within the same second gets _2, _3, ... rather than replacing
+    the first.
+    """
+    directory = os.path.join(os.path.expanduser(root), when.strftime("%Y%m%d"))
+    os.makedirs(directory, exist_ok=True)
+
+    stem = os.path.join(directory, when.strftime("%Y%m%d_%H%M%S"))
+    file_name, copy = f"{stem}.fits", 1
+    while os.path.exists(file_name):
+        copy += 1
+        file_name = f"{stem}_{copy}.fits"
+    return file_name
+
+
 class AtlasWindow(QMainWindow):
     """
     Main window for atlas.
@@ -28,6 +53,7 @@ class AtlasWindow(QMainWindow):
         super().__init__()
         self.view_model = view_model
         self.config = config
+        self.save_directory = config.save.directory
 
         self.setWindowTitle(config.window.title)
         screen = QDesktopWidget().screenGeometry()
@@ -66,6 +92,10 @@ class AtlasWindow(QMainWindow):
         self.file_menu = menu_bar.addMenu("File")
         self.add_action(self.file_menu, "Open Image…", self.open_images, "Ctrl+O")
         self.add_action(self.file_menu, "Open Directory…", self.open_directory)
+        self.file_menu.addSeparator()
+        self.save_action = self.add_action(
+            self.file_menu, "Save Frame", self.save_current_frame, "Ctrl+S")
+        self.add_action(self.file_menu, "Set Save Directory…", self.choose_save_directory)
         self.file_menu.addSeparator()
         self.add_action(self.file_menu, "Quit", self.close, "Ctrl+Q")
 
@@ -221,6 +251,31 @@ class AtlasWindow(QMainWindow):
         if loaded:
             self.show_message(f"Loaded {loaded} frame{'s' if loaded != 1 else ''}.")
 
+    def save_current_frame(self):
+        """
+        Saves the current frame's raw data and header straight to
+        <save directory>/<date>/<date>_<time>.fits, without asking where.
+        """
+        frame = self.view_model.current_frame
+        if frame is None:
+            return
+
+        try:
+            file_name = next_save_path(self.save_directory, datetime.now(timezone.utc))
+        except OSError as error:
+            self.show_message(f"Could not save: {error}")
+            return
+
+        self.view_model.save_frame(frame, file_name)
+
+    def choose_save_directory(self):
+        """Picks the directory Save Frame writes under, for this session."""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Save Frames Under", os.path.expanduser(self.save_directory))
+        if directory:
+            self.save_directory = directory
+            self.show_message(f"Saving frames under {directory}")
+
     def sync_display_mode(self, mode):
         """Keeps the View menu in step with the view model."""
         action = self.mode_actions.get(mode)
@@ -230,7 +285,7 @@ class AtlasWindow(QMainWindow):
     def update_frame_actions(self, *_):
         """Enables frame commands only when there is something to act on."""
         count = len(self.view_model.frames)
-        for action in (self.delete_action, self.delete_all_action):
+        for action in (self.save_action, self.delete_action, self.delete_all_action):
             action.setEnabled(count > 0)
         for action in (self.next_action, self.previous_action):
             action.setEnabled(count > 1)

@@ -2,7 +2,7 @@
 
 ```text
 atlas [files ...] [-c FILE] [-p NAME] [-m MODE] [--tile-columns N]
-      [--enable TOOL] [--disable TOOL] [--list-profiles] [-h]
+      [--save-dir DIR] [--enable TOOL] [--disable TOOL] [--list-profiles] [-h]
 ```
 
 Run `atlas --help` for the same list from the program itself.
@@ -27,9 +27,13 @@ Run `atlas --help` for the same list from the program itself.
 `--tile-columns N`
 : Columns to use when tiling. Omit it to let atlas pick a roughly square grid.
 
+`--save-dir DIR`
+: The directory **File → Save Frame** writes under, overriding the
+  configuration. See [](frames.md#saving-frames).
+
 `--enable TOOL`
-: Turn a tool on. Repeatable. Valid names are `header`, `histogram`, `shm`,
-  `statistics`, `tap_subtraction`, `zmq`.
+: Turn a tool on. Repeatable. Valid names are `header`, `histogram`,
+  `save_button`, `shm`, `statistics`, `tap_subtraction`, `zmq`.
 
 `--disable TOOL`
 : Turn a tool off. Repeatable.

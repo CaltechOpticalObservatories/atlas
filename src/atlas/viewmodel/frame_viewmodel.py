@@ -68,6 +68,23 @@ class FrameViewModel(QObject):
         self.current_changed.emit(self.current_index)
         return frame
 
+    def save_frame(self, frame, file_name):
+        """
+        Saves a frame's raw data and header to a FITS file.
+
+        Returns:
+            bool: True when the file was written.
+        """
+        try:
+            self.fits_model.save_fits_image(file_name, frame.data, frame.header)
+        except Exception as error:  # OSError, or astropy's verification errors
+            self.message.emit(f"Could not save {os.path.basename(file_name)}: {error}")
+            return False
+
+        # The full path, since the user never chose it.
+        self.message.emit(f"Saved {file_name}")
+        return True
+
     def new_frame(self, data, header, file_name=""):
         """Creates a frame, opened at the zoom the configuration asks for."""
         frame = Frame(data, header, file_name)

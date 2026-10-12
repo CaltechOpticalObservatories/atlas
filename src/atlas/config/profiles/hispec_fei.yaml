@@ -2,9 +2,13 @@
 display:
   mode: single
   zoom: 1.0
+save:
+  directory: /tmp/data    # frames go in <directory>/<UTC date>/
 tools:
   header: true
   histogram: true
+  # A toolbar button for File → Save Frame, saving into /tmp/data/<date>
+  save_button: true
   shm:
     enabled: true
     segment_name: hispec_tracking_camera
