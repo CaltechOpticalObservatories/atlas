@@ -156,6 +156,7 @@ class ToolsConfig:
     """
     header: bool = True
     histogram: bool = False
+    save_button: bool = False
     tap_subtraction: TapSubtractionConfig = field(default_factory=TapSubtractionConfig)
     zmq: ZmqConfig = field(default_factory=ZmqConfig)
     shm: ShmConfig = field(default_factory=ShmConfig)
@@ -171,7 +172,7 @@ class ToolsConfig:
         return names
 
     def validate(self, path):
-        for name in ("header", "histogram"):
+        for name in ("header", "histogram", "save_button"):
             value = getattr(self, name)
             if not isinstance(value, bool):
                 raise ConfigError(f"{path}.{name} must be true or false, got {value!r}")

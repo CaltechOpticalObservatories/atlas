@@ -39,6 +39,9 @@ Once enabled, the tool adds a **Tools → Shared Memory** submenu:
 - **Disconnect from SHM** stops.
 - **Set display rate…** opens a slider, 1 to 120 Hz.
 
+To keep the image currently on screen, use **File → Save Frame**
+(<kbd>Ctrl</kbd>+<kbd>S</kbd>); see [saving frames](frames.md#saving-frames).
+
 ### Where the segment is looked for
 
 atlas opens `<shm_dir>/<segment_name>.im.shm`, resolving the directory the way

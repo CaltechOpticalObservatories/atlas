@@ -36,6 +36,26 @@ class FITSModel:
             # dynamic, so pylint cannot see that this is an HDU with a header.
             return None, hdul[0].header.copy()
 
+    def save_fits_image(self, file_name, image_data, header=None):
+        """
+        Write image data and its header to a FITS file, as the primary HDU.
+
+        A header read from an extension HDU is turned into a primary one by
+        astropy, and the structural keywords (BITPIX, NAXISn, BZERO) are
+        rewritten to match the data, so the header only has to carry the
+        descriptive cards. A name ending in .gz is gzip-compressed.
+
+        Args:
+            file_name (str): The path to write. An existing file is never
+                replaced: that raises OSError instead.
+            image_data (numpy.ndarray): The raw image data.
+            header (astropy.io.fits.Header): Header cards to keep, or None.
+        """
+        hdu = fits.PrimaryHDU(image_data, header=header)
+        # Shared-memory keywords are free-form, and a card astropy can repair
+        # (a lowercase name, say) must not stop the pixels being saved.
+        hdu.writeto(file_name, overwrite=False, output_verify="silentfix")
+
     def normalize_image(self, image_data, scale="linear"):
         """
         Normalizes image data to the range [0, 255] for display purposes,

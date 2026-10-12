@@ -44,6 +44,7 @@ display:
 tools:
   header: true              # FITS header panel
   histogram: false          # pixel-intensity histograms
+  save_button: false        # Save Frame button on a toolbar
   tap_subtraction: false    # COO detector signal/reset taps
   zmq: false                # load frames announced over ZMQ
   shm: false                # live ImageStreamIO shared-memory frames
@@ -108,6 +109,12 @@ A plain boolean, on by default. Adds the FITS header dock panel described in
 A plain boolean, off by default. Adds **Tools → Histogram…**; see
 [](inspecting.md#histograms).
 
+### `tools.save_button`
+
+A plain boolean, off by default. Puts **File → Save Frame** on a toolbar
+as a button; see [](frames.md#saving-frames). It is the menu command itself, not a
+copy, so it shares the shortcut and is greyed out until there is a frame.
+
 ### `tools.statistics`
 
 | Key | Type | Default | Notes |
@@ -157,6 +164,7 @@ See [](live.md#shared-memory).
 | `minimal` | Image display only: no panels, no tools |
 | `viewer` | General FITS viewing: headers and histograms |
 | `detector` | COO detector work: tiled frames, tap subtraction, ZMQ, statistics |
+| `hispec_fei` | HISPEC FEI tracking camera: live shared memory, statistics, a Save Frame button |
 
 `atlas --list-profiles` prints them. The YAML lives in
 `src/atlas/config/profiles/`, which is a good place to look when writing your

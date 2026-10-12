@@ -27,6 +27,45 @@ roughly square arrangement from however many frames are open, which is usually
 what you want; fixing it to `1` gives a single column, which is how the
 `detector` profile stacks a signal frame above its reset frame.
 
+(saving)=
+## Saving frames
+
+**File → Save Frame** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes the current frame
+to a FITS file straight away, without asking where. The file holds the frame's
+raw data, in its original type, and its header. What you see on screen plays
+no part, so the scale and zoom are not baked in and the counts come back
+exactly as they went out.
+
+Profiles that switch on [`save_button`](configuration.md#toolssave_button),
+such as `hispec_fei`, also show the command as a **Save Frame** button on a
+toolbar above the image.
+
+This is chiefly for frames from a [live stream](live.md), which have no file of
+their own. The file holds the image on screen at the moment you saved. Its
+header holds the segment's keywords, with any name longer than eight characters
+written as a `HIERARCH` card.
+
+Every save goes in a directory for the day under `/tmp/data`, named for the
+moment you saved:
+
+```text
+/tmp/data/20261012/20261012_190637.fits
+```
+
+Both the date and the time are UTC, following the UT dates observatories file
+data under, and a run of saves sorts in the order it was taken. The day's
+directory is created on the first save. The status bar shows the full path of
+each file written.
+
+A save never replaces an existing file. Two saves within the same second are
+both kept, the second as `20261012_190637_2.fits`. If the directory cannot be
+created, the status bar says why and nothing is written.
+
+:::{warning}
+`/tmp` is cleared on reboot, and on many systems files left there for some
+days are removed as well. Copy anything worth keeping somewhere permanent.
+:::
+
 (zoom)=
 ## Zoom
 
