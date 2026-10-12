@@ -8,7 +8,7 @@ precedence:
 1. Built-in defaults
 2. The `--profile`
 3. The `--config` file
-4. Command-line overrides (`--mode`, `--tile-columns`, `--enable`, `--disable`)
+4. Command-line overrides (`--mode`, `--tile-columns`, `--save-dir`, `--enable`, `--disable`)
 
 Each layer overrides the one before it, so `--profile detector --disable zmq`
 is exactly the detector profile with one tool switched off.
@@ -40,6 +40,9 @@ display:
   mode: single              # single | tile
   tile_columns: null        # null picks a roughly square grid
   zoom: 1.0                 # 1.0 fits each new frame to its tile
+
+save:
+  directory: /tmp/data      # saved frames go in <directory>/<UTC date>/
 
 tools:
   header: true              # FITS header panel
@@ -98,6 +101,12 @@ the defaults for its other keys.
 | `mode` | `single` or `tile` | `single` | See [](frames) |
 | `tile_columns` | integer or `null` | `null` | Positive; `null` picks a square-ish grid |
 | `zoom` | number | `1.0` | 0.015625 to 512; the zoom new frames open at, see [](frames.md#zoom) |
+
+### `save`
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `directory` | string | `/tmp/data` | Non-empty; `~` is expanded. Saved frames go in a subdirectory per UTC day, see [](frames.md#saving-frames) |
 
 ### `tools.header`
 

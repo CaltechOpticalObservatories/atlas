@@ -29,6 +29,8 @@ def parse_args(argv):
                         help="display mode, overriding the configuration")
     parser.add_argument("--tile-columns", type=int, metavar="N",
                         help="columns to use when tiling")
+    parser.add_argument("--save-dir", metavar="DIR",
+                        help="directory File → Save Frame writes under")
     parser.add_argument("--enable", action="append", default=[], metavar="TOOL",
                         help=f"turn a tool on ({', '.join(registered_names())})")
     parser.add_argument("--disable", action="append", default=[], metavar="TOOL",
@@ -56,6 +58,8 @@ def overrides_from_args(args):
     overrides = {}
     if display:
         overrides["display"] = display
+    if args.save_dir:
+        overrides["save"] = {"directory": args.save_dir}
     if tools:
         overrides["tools"] = tools
     return overrides

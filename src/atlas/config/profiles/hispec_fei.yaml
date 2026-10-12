@@ -2,6 +2,8 @@
 display:
   mode: single
   zoom: 1.0
+save:
+  directory: /tmp/data    # frames go in <directory>/<UTC date>/
 tools:
   header: true
   histogram: true

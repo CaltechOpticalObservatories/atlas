@@ -45,8 +45,8 @@ their own. The file holds the image on screen at the moment you saved. Its
 header holds the segment's keywords, with any name longer than eight characters
 written as a `HIERARCH` card.
 
-Every save goes in a directory for the day under `/tmp/data`, named for the
-moment you saved:
+Every save goes in a directory for the day under the save directory,
+`/tmp/data` unless you choose another, named for the moment you saved:
 
 ```text
 /tmp/data/20261012/20261012_190637.fits
@@ -61,9 +61,25 @@ A save never replaces an existing file. Two saves within the same second are
 both kept, the second as `20261012_190637_2.fits`. If the directory cannot be
 created, the status bar says why and nothing is written.
 
+To save somewhere else, set it in the configuration, or for one session on the
+command line, or from the running window with **File → Set Save Directory…**:
+
+```yaml
+save:
+  directory: /data/fei
+```
+
+```sh
+atlas --profile hispec_fei --save-dir /data/fei
+```
+
+A directory picked from the menu lasts until atlas quits; the next launch goes
+back to the configured one.
+
 :::{warning}
 `/tmp` is cleared on reboot, and on many systems files left there for some
-days are removed as well. Copy anything worth keeping somewhere permanent.
+days are removed as well. Choose a permanent save directory, or copy anything
+worth keeping out of `/tmp/data`.
 :::
 
 (zoom)=

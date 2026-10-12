@@ -149,6 +149,17 @@ class StatisticsConfig:
 
 
 @dataclass
+class SaveConfig:
+    """Where File → Save Frame writes, one directory per UTC day under it."""
+    directory: str = "/tmp/data"
+
+    def validate(self, path):
+        if not isinstance(self.directory, str) or not self.directory:
+            raise ConfigError(
+                f"{path}.directory must be a non-empty path, got {self.directory!r}")
+
+
+@dataclass
 class ToolsConfig:
     """
     Optional tools. Everything here is opt-in so that a default launch stays a
@@ -187,11 +198,13 @@ class AtlasConfig:
     """The complete resolved configuration for one atlas session."""
     window: WindowConfig = field(default_factory=WindowConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
+    save: SaveConfig = field(default_factory=SaveConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
 
     def validate(self):
         self.window.validate("window")
         self.display.validate("display")
+        self.save.validate("save")
         self.tools.validate("tools")
         return self
 
@@ -253,5 +266,6 @@ def from_dict(data):
     return AtlasConfig(
         window=build(WindowConfig, data.get("window"), "window"),
         display=build(DisplayConfig, data.get("display"), "display"),
+        save=build(SaveConfig, data.get("save"), "save"),
         tools=build(ToolsConfig, data.get("tools"), "tools"),
     ).validate()

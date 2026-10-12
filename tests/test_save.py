@@ -2,7 +2,7 @@
 Saving a frame to FITS.
 
 Saving never asks where: Ctrl+S or the toolbar button writes the current frame
-straight to SAVE_ROOT/<date>/<date>_<time>.fits. With no dialog there is also
+straight to <save directory>/<date>/<date>_<time>.fits. With no dialog there is also
 nothing to confirm an overwrite, so the tests that matter most are that a save
 lands where it should and never replaces an earlier one.
 """
@@ -18,10 +18,11 @@ from astropy.io import fits
 import numpy as np
 import pytest
 
-from PyQt5.QtWidgets import QToolBar
+from PyQt5.QtWidgets import QFileDialog, QToolBar
 
 from atlas.config.loader import load_config
-from atlas.config.schema import AtlasConfig, ToolsConfig
+from atlas.config.schema import AtlasConfig, ConfigError, SaveConfig, ToolsConfig
+from atlas.main import overrides_from_args, parse_args
 from atlas.view import main_window
 
 COUNTS = (np.arange(64, dtype=np.uint16) + 60000).reshape(8, 8)
@@ -29,18 +30,22 @@ WHEN = datetime(2026, 10, 12, 19, 6, 37, tzinfo=timezone.utc)
 
 
 @pytest.fixture
-def save_root(monkeypatch, tmp_path):
+def save_root(tmp_path):
     """Stands in for /tmp/data, so no test writes outside its own directory."""
     root = tmp_path / "data"
     root.mkdir()
-    monkeypatch.setattr(main_window, "SAVE_ROOT", str(root))
     return root
 
 
+def saving_to(root, **sections):
+    """A configuration that saves under `root` rather than /tmp/data."""
+    return AtlasConfig(save=SaveConfig(directory=str(root)), **sections)
+
+
 @pytest.fixture
-def window(make_window, save_root):  # pylint: disable=unused-argument
+def window(make_window, save_root):
     """A window and its view model, with no tools switched on."""
-    return make_window(AtlasConfig())
+    return make_window(saving_to(save_root))
 
 
 def save(window, save_root):
@@ -97,8 +102,8 @@ def test_file_frame_from_an_extension_round_trips(window, save_root, tmp_path):
 
 
 def test_path_is_dated_directory_and_timestamp(save_root):
-    """SAVE_ROOT/<date>/<date>_<time>.fits, with the directory made ready."""
-    path = main_window.next_save_path(WHEN)
+    """root/<date>/<date>_<time>.fits, with the directory made ready."""
+    path = main_window.next_save_path(str(save_root), WHEN)
 
     assert path == str(save_root / "20261012" / "20261012_190637.fits")
     assert (save_root / "20261012").is_dir()
@@ -106,13 +111,13 @@ def test_path_is_dated_directory_and_timestamp(save_root):
 
 def test_saves_in_the_same_second_are_all_kept(save_root):
     """Nothing confirms an overwrite any more, so a name is never reused."""
-    first = main_window.next_save_path(WHEN)
+    first = main_window.next_save_path(str(save_root), WHEN)
     open(first, "wb").close()
-    second = main_window.next_save_path(WHEN)
+    second = main_window.next_save_path(str(save_root), WHEN)
     open(second, "wb").close()
 
     assert second == str(save_root / "20261012" / "20261012_190637_2.fits")
-    assert main_window.next_save_path(WHEN).endswith("20261012_190637_3.fits")
+    assert main_window.next_save_path(str(save_root), WHEN).endswith("20261012_190637_3.fits")
 
 
 def test_existing_file_is_never_replaced(window, save_root):
@@ -126,13 +131,13 @@ def test_existing_file_is_never_replaced(window, save_root):
     assert target.read_bytes() == b"precious"
 
 
-def test_unwritable_root_is_reported_not_raised(window, monkeypatch, tmp_path):
+def test_unwritable_root_is_reported_not_raised(window, tmp_path):
     """No dialog means no other place to put it: say so and write nothing."""
     atlas_window, view_model = window
     view_model.update_live_frame(COUNTS, {})
     blocker = tmp_path / "not_a_directory"
     blocker.write_text("")
-    monkeypatch.setattr(main_window, "SAVE_ROOT", str(blocker))
+    atlas_window.save_directory = str(blocker)
 
     atlas_window.save_current_frame()
 
@@ -155,9 +160,10 @@ def test_save_button_is_off_unless_a_profile_asks(window):
     assert not atlas_window.findChildren(QToolBar)
 
 
-def test_save_button_is_the_menu_command(make_window, save_root):  # pylint: disable=unused-argument
+def test_save_button_is_the_menu_command(make_window, save_root):
     """One action in two places, so the button can never drift from the menu."""
-    atlas_window, view_model = make_window(AtlasConfig(tools=ToolsConfig(save_button=True)))
+    atlas_window, view_model = make_window(
+        saving_to(save_root, tools=ToolsConfig(save_button=True)))
     (toolbar,) = atlas_window.findChildren(QToolBar)
 
     assert toolbar.actions() == [atlas_window.save_action]
@@ -169,3 +175,47 @@ def test_save_button_is_the_menu_command(make_window, save_root):  # pylint: dis
 def test_fei_profile_shows_the_save_button():
     """The FEI station saves live frames often enough to want it on screen."""
     assert load_config(profile="hispec_fei").tools.save_button
+
+
+def test_save_directory_defaults_to_tmp_data():
+    """Anyone can write there, so saving works before anything is configured."""
+    assert AtlasConfig().save.directory == "/tmp/data"
+
+
+def test_save_directory_comes_from_the_command_line():
+    """--save-dir overrides whatever the profile or config file says."""
+    args = parse_args(["--profile", "hispec_fei", "--save-dir", "/data/fei"])
+    config = load_config(profile=args.profile, overrides=overrides_from_args(args))
+    assert config.save.directory == "/data/fei"
+
+
+def test_an_empty_save_directory_is_rejected():
+    """Like every other key, a bad value stops atlas starting, not saving."""
+    with pytest.raises(ConfigError, match="save.directory"):
+        AtlasConfig(save=SaveConfig(directory="")).validate()
+
+
+def test_save_directory_can_be_changed_from_the_menu(window, monkeypatch, tmp_path):
+    """File → Set Save Directory… sends later saves somewhere else."""
+    atlas_window, view_model = window
+    view_model.update_live_frame(COUNTS, {})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        lambda *_: str(elsewhere))
+
+    atlas_window.choose_save_directory()
+    atlas_window.save_current_frame()
+
+    (saved,) = elsewhere.rglob("*.fits")
+    assert np.array_equal(fits.getdata(saved), COUNTS)
+
+
+def test_cancelling_the_directory_picker_keeps_the_directory(window, monkeypatch, save_root):
+    """An empty answer from the picker means the user backed out."""
+    atlas_window, _ = window
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_: "")
+
+    atlas_window.choose_save_directory()
+
+    assert atlas_window.save_directory == str(save_root)

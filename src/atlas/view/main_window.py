@@ -13,7 +13,6 @@ from atlas.model.zoom import ZOOM_STEP
 from .frame_grid import FrameGrid
 
 FITS_FILTER = "FITS Files (*.fits *.fit *.fts *.fits.gz *.fz);;All Files (*)"
-SAVE_ROOT = "/tmp/data"
 SCALE_TITLES = {
     "linear": ("Linear", "Ctrl+3"),
     "log": ("Log", "Ctrl+4"),
@@ -21,16 +20,16 @@ SCALE_TITLES = {
 
 
 
-def next_save_path(when):
+def next_save_path(root, when):
     """
-    Path for a frame saved at `when`: SAVE_ROOT/<date>/<date>_<time>.fits,
-    in UTC, creating the day's directory.
+    Path for a frame saved at `when`: root/<date>/<date>_<time>.fits, in UTC,
+    creating the day's directory.
 
     Nothing asks before a save, so nothing confirms an overwrite either: a
     second save within the same second gets _2, _3, ... rather than replacing
     the first.
     """
-    directory = os.path.join(SAVE_ROOT, when.strftime("%Y%m%d"))
+    directory = os.path.join(os.path.expanduser(root), when.strftime("%Y%m%d"))
     os.makedirs(directory, exist_ok=True)
 
     stem = os.path.join(directory, when.strftime("%Y%m%d_%H%M%S"))
@@ -54,6 +53,7 @@ class AtlasWindow(QMainWindow):
         super().__init__()
         self.view_model = view_model
         self.config = config
+        self.save_directory = config.save.directory
 
         self.setWindowTitle(config.window.title)
         screen = QDesktopWidget().screenGeometry()
@@ -95,6 +95,7 @@ class AtlasWindow(QMainWindow):
         self.file_menu.addSeparator()
         self.save_action = self.add_action(
             self.file_menu, "Save Frame", self.save_current_frame, "Ctrl+S")
+        self.add_action(self.file_menu, "Set Save Directory…", self.choose_save_directory)
         self.file_menu.addSeparator()
         self.add_action(self.file_menu, "Quit", self.close, "Ctrl+Q")
 
@@ -253,19 +254,27 @@ class AtlasWindow(QMainWindow):
     def save_current_frame(self):
         """
         Saves the current frame's raw data and header straight to
-        SAVE_ROOT/<date>/<date>_<time>.fits, without asking where.
+        <save directory>/<date>/<date>_<time>.fits, without asking where.
         """
         frame = self.view_model.current_frame
         if frame is None:
             return
 
         try:
-            file_name = next_save_path(datetime.now(timezone.utc))
+            file_name = next_save_path(self.save_directory, datetime.now(timezone.utc))
         except OSError as error:
             self.show_message(f"Could not save: {error}")
             return
 
         self.view_model.save_frame(frame, file_name)
+
+    def choose_save_directory(self):
+        """Picks the directory Save Frame writes under, for this session."""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Save Frames Under", os.path.expanduser(self.save_directory))
+        if directory:
+            self.save_directory = directory
+            self.show_message(f"Saving frames under {directory}")
 
     def sync_display_mode(self, mode):
         """Keeps the View menu in step with the view model."""
