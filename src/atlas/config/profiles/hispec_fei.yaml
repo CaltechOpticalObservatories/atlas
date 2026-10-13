@@ -7,7 +7,8 @@ save:
 tools:
   header: true
   histogram: true
-  # A toolbar button for File → Save Frame, saving into /tmp/data/<date>
+  # A toolbar button for File → Save Frame, saving under save.directory above,
+  # with a Frames box for saving several stream frames as one cube
   save_button: true
   shm:
     enabled: true

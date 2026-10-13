@@ -75,8 +75,18 @@ class FrameViewModel(QObject):
         Returns:
             bool: True when the file was written.
         """
+        return self.save_image(file_name, frame.data, frame.header)
+
+    def save_image(self, file_name, data, header=None, frame_table=None):
+        """
+        Saves raw image data, which may be a cube of several frames, to a
+        FITS file. See FITSModel.save_fits_image.
+
+        Returns:
+            bool: True when the file was written.
+        """
         try:
-            self.fits_model.save_fits_image(file_name, frame.data, frame.header)
+            self.fits_model.save_fits_image(file_name, data, header, frame_table)
         except Exception as error:  # OSError, or astropy's verification errors
             self.message.emit(f"Could not save {os.path.basename(file_name)}: {error}")
             return False

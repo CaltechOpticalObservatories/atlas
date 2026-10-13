@@ -123,6 +123,9 @@ A plain boolean, off by default. Adds **Tools → Histogram…**; see
 A plain boolean, off by default. Puts **File → Save Frame** on a toolbar
 as a button; see [](frames.md#saving-frames). It is the menu command itself, not a
 copy, so it shares the shortcut and is greyed out until there is a frame.
+When [`shm`](#toolsshm) is on as well, a **Frames** box beside the button sets
+how many frames each save takes; see
+[](frames.md#saving-several-frames-at-once).
 
 ### `tools.statistics`
 

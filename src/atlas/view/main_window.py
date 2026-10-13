@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt
 
 from atlas.features import build_tools
 from atlas.model.fits_model import SCALES
+from atlas.model.saving import next_save_path
 from atlas.model.zoom import ZOOM_STEP
 from .frame_grid import FrameGrid
 
@@ -18,26 +19,6 @@ SCALE_TITLES = {
     "log": ("Log", "Ctrl+4"),
 }
 
-
-
-def next_save_path(root, when):
-    """
-    Path for a frame saved at `when`: root/<date>/<date>_<time>.fits, in UTC,
-    creating the day's directory.
-
-    Nothing asks before a save, so nothing confirms an overwrite either: a
-    second save within the same second gets _2, _3, ... rather than replacing
-    the first.
-    """
-    directory = os.path.join(os.path.expanduser(root), when.strftime("%Y%m%d"))
-    os.makedirs(directory, exist_ok=True)
-
-    stem = os.path.join(directory, when.strftime("%Y%m%d_%H%M%S"))
-    file_name, copy = f"{stem}.fits", 1
-    while os.path.exists(file_name):
-        copy += 1
-        file_name = f"{stem}_{copy}.fits"
-    return file_name
 
 
 class AtlasWindow(QMainWindow):
@@ -254,7 +235,8 @@ class AtlasWindow(QMainWindow):
     def save_current_frame(self):
         """
         Saves the current frame's raw data and header straight to
-        <save directory>/<date>/<date>_<time>.fits, without asking where.
+        <save directory>/<date>/<date>_<time>.fits (see atlas.model.saving),
+        without asking where.
         """
         frame = self.view_model.current_frame
         if frame is None:

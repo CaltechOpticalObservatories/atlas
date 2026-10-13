@@ -13,6 +13,7 @@ import os
 import struct
 import time
 from dataclasses import dataclass, field
+from typing import Optional
 
 # Third-Party Library Imports
 import numpy as np
@@ -49,6 +50,9 @@ class ShmFrame:
     """One frame read from an ImageStreamIO segment."""
     data: np.ndarray
     keywords: dict = field(default_factory=dict)
+    # The segment's frame counter for this image; a jump of more than one
+    # between frames means the reader missed some in between.
+    cnt0: Optional[int] = None
 
 
 @dataclass
@@ -150,6 +154,8 @@ def _read_frame(mm, data_offset):
     (nbkw,) = struct.unpack_from("<H", mm, _OFFSET_NBKW)
     (imdatamemsize,) = struct.unpack_from("<Q", mm, _OFFSET_IMDATAMEMSIZE)
 
+    cnt0 = _read_cnt0(mm)
+
     dtype = _DATATYPE_TO_NUMPY.get(datatype)
     if dtype is None:
         raise RuntimeError(f"unsupported ImageStreamIO datatype {datatype}")
@@ -159,7 +165,7 @@ def _read_frame(mm, data_offset):
 
     kw_offset = data_offset + _round_up_8(imdatamemsize)
     keywords = _read_keywords(mm, kw_offset, nbkw)
-    return ShmFrame(data=data, keywords=keywords)
+    return ShmFrame(data=data, keywords=keywords, cnt0=cnt0)
 
 
 def wait_for_frame(handle, timeout):
