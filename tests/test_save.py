@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import QFileDialog, QToolBar
 from atlas.config.loader import load_config
 from atlas.config.schema import AtlasConfig, ConfigError, SaveConfig, ToolsConfig
 from atlas.main import overrides_from_args, parse_args
-from atlas.view import main_window
+from atlas.model import saving
 
 COUNTS = (np.arange(64, dtype=np.uint16) + 60000).reshape(8, 8)
 WHEN = datetime(2026, 10, 12, 19, 6, 37, tzinfo=timezone.utc)
@@ -103,7 +103,7 @@ def test_file_frame_from_an_extension_round_trips(window, save_root, tmp_path):
 
 def test_path_is_dated_directory_and_timestamp(save_root):
     """root/<date>/<date>_<time>.fits, with the directory made ready."""
-    path = main_window.next_save_path(str(save_root), WHEN)
+    path = saving.next_save_path(str(save_root), WHEN)
 
     assert path == str(save_root / "20261012" / "20261012_190637.fits")
     assert (save_root / "20261012").is_dir()
@@ -111,13 +111,15 @@ def test_path_is_dated_directory_and_timestamp(save_root):
 
 def test_saves_in_the_same_second_are_all_kept(save_root):
     """Nothing confirms an overwrite any more, so a name is never reused."""
-    first = main_window.next_save_path(str(save_root), WHEN)
-    open(first, "wb").close()
-    second = main_window.next_save_path(str(save_root), WHEN)
-    open(second, "wb").close()
+    first = saving.next_save_path(str(save_root), WHEN)
+    with open(first, "wb"):
+        pass
+    second = saving.next_save_path(str(save_root), WHEN)
+    with open(second, "wb"):
+        pass
 
     assert second == str(save_root / "20261012" / "20261012_190637_2.fits")
-    assert main_window.next_save_path(str(save_root), WHEN).endswith("20261012_190637_3.fits")
+    assert saving.next_save_path(str(save_root), WHEN).endswith("20261012_190637_3.fits")
 
 
 def test_existing_file_is_never_replaced(window, save_root):

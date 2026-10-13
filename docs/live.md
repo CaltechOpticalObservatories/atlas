@@ -40,7 +40,9 @@ Once enabled, the tool adds a **Tools → Shared Memory** submenu:
 - **Set display rate…** opens a slider, 1 to 120 Hz.
 
 To keep the image currently on screen, use **File → Save Frame**
-(<kbd>Ctrl</kbd>+<kbd>S</kbd>); see [saving frames](frames.md#saving-frames).
+(<kbd>Ctrl</kbd>+<kbd>S</kbd>); see [saving frames](frames.md#saving-frames). With
+the [save button](configuration.md#toolssave_button) on, a **Frames** box saves
+several consecutive frames into one cube.
 
 ### Where the segment is looked for
 

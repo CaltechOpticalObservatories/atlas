@@ -15,6 +15,7 @@ configured display cap.
 # pylint: disable=redefined-outer-name, protected-access, unused-argument
 
 # Standard Library Imports
+from datetime import datetime, timezone
 import os
 import struct
 import threading
@@ -26,9 +27,11 @@ import numpy as np
 import pytest
 from PyQt5.QtWidgets import QApplication
 
-from atlas.config.schema import AtlasConfig, ShmConfig
+from astropy.io import fits
+
+from atlas.config.schema import AtlasConfig, SaveConfig, ShmConfig, ToolsConfig
 from atlas.features import shm_reader
-from atlas.features.shm_source import ShmReceiver
+from atlas.features.shm_source import ShmReceiver, stack_frames
 from atlas.viewmodel.frame_viewmodel import FrameViewModel
 
 DISPLAY_FPS_CAP = 15.0
@@ -210,7 +213,8 @@ def fake_producer():
     def wait_for_frame(_image, timeout):  # pylint: disable=unused-argument
         counter["n"] += 1
         data = np.full((4, 4), counter["n"] % 256, dtype=np.uint16)
-        return shm_reader.ShmFrame(data=data, keywords={"FRAMENO": counter["n"]})
+        return shm_reader.ShmFrame(data=data, keywords={"FRAMENO": counter["n"]},
+                                   cnt0=counter["n"])
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(shm_reader, "attach", lambda _name, _dir="": "fake-handle")
@@ -303,3 +307,155 @@ def test_stop_joins_the_reader_thread(slow_gui_run):
 def test_stop_drops_the_pending_frame(slow_gui_run):
     """Reconnecting should not open on an image from the previous session."""
     assert slow_gui_run.receiver.slot.take() is None
+
+
+# Saving several frames at once: kept on the reader thread, written as a cube.
+
+NOW = datetime(2026, 10, 12, 19, 6, 37, tzinfo=timezone.utc)
+
+
+def shm_frame(value, cnt0=None, shape=(4, 4), **keywords):
+    """One ShmFrame filled with `value`."""
+    return shm_reader.ShmFrame(data=np.full(shape, value, dtype=np.uint16),
+                               keywords=keywords, cnt0=cnt0)
+
+
+def test_stack_keeps_every_frame_and_its_own_keywords():
+    """One header for the cube, but each frame's keywords survive in the table."""
+    frames = [shm_frame(n, cnt0=n, FRAMENO=n, MODE="CDS") for n in (5, 6, 7)]
+
+    cube, header, table, skipped = stack_frames(frames)
+
+    assert cube.shape == (3, 4, 4)
+    assert [plane[0, 0] for plane in cube] == [5, 6, 7]
+    assert header["FRAMENO"] == 5 and header["NSKIPPED"] == 0
+    assert table is not None
+    assert list(table.columns["CNT0"]) == [5, 6, 7]
+    assert list(table.columns["FRAMENO"]) == [5, 6, 7]
+    assert skipped == 0
+
+
+def test_stack_counts_frames_the_reader_missed():
+    """A jump in cnt0 means frames went by unread; the file has to say so."""
+    _, header, _, skipped = stack_frames([shm_frame(0, cnt0=n) for n in (10, 11, 14, 15)])
+    assert skipped == 2
+    assert header["NSKIPPED"] == 2
+
+
+def test_stack_without_cnt0_does_not_guess():
+    """Frames that carry no counter cannot say whether any were missed."""
+    _, header, table, skipped = stack_frames([shm_frame(n, FRAMENO=n) for n in (1, 2)])
+    assert skipped is None
+    assert "NSKIPPED" not in header
+    assert table.colnames == ["FRAMENO"]
+
+
+def test_stack_refuses_frames_of_different_sizes():
+    """A segment recreated at another size cannot be stacked into one cube."""
+    with pytest.raises(ValueError, match="size changed"):
+        stack_frames([shm_frame(0), shm_frame(0, shape=(8, 8))])
+
+
+def test_receiver_captures_the_frames_it_reads(qapp, tmp_path, producer, receiver_for):
+    """Against a real segment, the capture is every frame read, in order."""
+    path = create_segment(str(tmp_path))
+    producer(path)
+    receiver = receiver_for()
+    captured = []
+    receiver.captured.connect(captured.append)
+
+    receiver.start()
+    assert wait_until(lambda: receiver.slot.take() is not None)
+    assert receiver.capture(10, NOW)
+    assert not receiver.capture(10, NOW), "a second capture must wait for the first"
+
+    assert wait_until(lambda: captured), "the capture never filled"
+    assert len(captured) == 1
+    counters = [frame.cnt0 for frame in captured[0].frames]
+    assert len(counters) == 10
+    assert counters == sorted(set(counters)), "frames repeated or out of order"
+    assert receiver.capture_progress() is None
+
+
+@pytest.fixture
+def live_window(make_window, fake_producer, tmp_path):
+    """
+    A window with shared memory and the save button on, reading the fake
+    producer, and saving under tmp_path rather than /tmp/data.
+    """
+    # pylint: disable=unused-argument  # fake_producer is needed for its patching
+    config = AtlasConfig(save=SaveConfig(directory=str(tmp_path)), tools=ToolsConfig(
+        save_button=True, shm=ShmConfig(enabled=True, segment_name=SEGMENT)))
+    window, view_model = make_window(config)
+    yield window, view_model, window.tools["shm"], window.tools["save_button"]
+    window.tools["shm"].shutdown()
+
+
+def saved_files(tmp_path):
+    """Every FITS file a test has saved."""
+    return sorted(tmp_path.rglob("*.fits"))
+
+
+def test_frames_box_only_with_shared_memory(make_window):
+    """Without a stream there is nothing to take several frames from."""
+    window, _ = make_window(AtlasConfig(tools=ToolsConfig(save_button=True)))
+    assert window.tools["save_button"].count is None
+
+
+def test_save_button_saves_a_cube_of_the_next_frames(live_window, tmp_path):
+    """The whole feature: Frames 5, Save, and one file holds five frames."""
+    window, _, shm, button = live_window
+    shm.connect_to_shm()
+    assert wait_until(window.save_action.isEnabled), "no frame arrived"
+
+    button.count.setValue(5)
+    window.save_action.trigger()
+
+    assert wait_until(lambda: saved_files(tmp_path)), "the cube was never written"
+    (saved,) = saved_files(tmp_path)
+    cube, frames = fits.getdata(saved, "PRIMARY"), fits.getdata(saved, "FRAMES")
+    assert cube.shape == (5, 4, 4)
+    numbers = list(frames["FRAMENO"])
+    assert numbers == list(range(numbers[0], numbers[0] + 5)), \
+        "a capture should be consecutive frames, not what the display let through"
+    # Each plane is the frame its table row describes.
+    assert [plane[0, 0] for plane in cube] == [n % 256 for n in numbers]
+    assert window.statusBar().currentMessage() == f"Saved {saved}"
+
+
+def test_one_frame_still_saves_the_frame_on_screen(live_window, tmp_path):
+    """The Frames box at 1 leaves saving exactly as it was."""
+    window, view_model, shm, _ = live_window
+    shm.connect_to_shm()
+    assert wait_until(window.save_action.isEnabled)
+    shm.disconnect_from_shm()  # hold the frame still
+
+    window.save_action.trigger()
+
+    (saved,) = saved_files(tmp_path)
+    assert np.array_equal(fits.getdata(saved), view_model.current_frame.data)
+
+
+def test_several_frames_need_a_connection(live_window, tmp_path):
+    """Asking before connecting is a message, not a capture that never ends."""
+    window, view_model, _, button = live_window
+    view_model.update_live_frame(np.zeros((4, 4), np.uint16), {})
+    button.count.setValue(5)
+
+    window.save_action.trigger()
+
+    assert window.statusBar().currentMessage().startswith("Connect to shared memory")
+    assert not saved_files(tmp_path)
+
+
+def test_disconnecting_cancels_a_capture(live_window, tmp_path):
+    """Half a cube is not written, and the user is told it was dropped."""
+    window, _, shm, _ = live_window
+    shm.connect_to_shm()
+    assert shm.receiver.capture(10 ** 9, NOW)
+
+    shm.disconnect_from_shm()
+
+    assert "cancelled" in window.statusBar().currentMessage()
+    assert shm.receiver.capture_progress() is None
+    assert not saved_files(tmp_path)

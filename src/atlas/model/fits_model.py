@@ -36,7 +36,7 @@ class FITSModel:
             # dynamic, so pylint cannot see that this is an HDU with a header.
             return None, hdul[0].header.copy()
 
-    def save_fits_image(self, file_name, image_data, header=None):
+    def save_fits_image(self, file_name, image_data, header=None, frame_table=None):
         """
         Write image data and its header to a FITS file, as the primary HDU.
 
@@ -45,16 +45,25 @@ class FITSModel:
         rewritten to match the data, so the header only has to carry the
         descriptive cards. A name ending in .gz is gzip-compressed.
 
+        A cube of several frames is stored as (nframes, height, width), the
+        FITS convention, and `frame_table` can carry one row per frame in a
+        binary table extension named FRAMES.
+
         Args:
             file_name (str): The path to write. An existing file is never
                 replaced: that raises OSError instead.
             image_data (numpy.ndarray): The raw image data.
             header (astropy.io.fits.Header): Header cards to keep, or None.
+            frame_table (astropy.table.Table): Per-frame values, or None.
         """
-        hdu = fits.PrimaryHDU(image_data, header=header)
+        hdus = fits.HDUList([fits.PrimaryHDU(image_data, header=header)])
+        if frame_table is not None:
+            table_hdu = fits.table_to_hdu(frame_table)
+            table_hdu.name = "FRAMES"
+            hdus.append(table_hdu)
         # Shared-memory keywords are free-form, and a card astropy can repair
         # (a lowercase name, say) must not stop the pixels being saved.
-        hdu.writeto(file_name, overwrite=False, output_verify="silentfix")
+        hdus.writeto(file_name, overwrite=False, output_verify="silentfix")
 
     def normalize_image(self, image_data, scale="linear"):
         """

@@ -82,6 +82,37 @@ days are removed as well. Choose a permanent save directory, or copy anything
 worth keeping out of `/tmp/data`.
 :::
 
+### Saving several frames at once
+
+With shared memory switched on, the toolbar also has a **Frames** box beside
+the Save Frame button. At 1, saving works as above. Set it higher, say 50, and
+a save takes the **next** 50 frames off the stream and writes them to one file,
+a cube of shape (50, height, width). The menu command and
+<kbd>Ctrl</kbd>+<kbd>S</kbd> follow the box too.
+
+The frames are kept by the background reader, not taken from the display, so
+they are consecutive frames from the detector even when the
+[display rate](live.md#the-display-rate-cap) is far below the frame rate. The
+status bar counts them in (`saving frame 12 of 50`), and the file is named for
+the moment you pressed Save.
+
+The cube's header is the first frame's keywords. Each frame's own keywords,
+and its `cnt0` frame counter from the segment, go in a table extension named
+`FRAMES`, one row per frame:
+
+```python
+from astropy.io import fits
+
+cube = fits.getdata("20261012_190637.fits")              # (50, height, width)
+frames = fits.getdata("20261012_190637.fits", "FRAMES")  # one row per plane
+```
+
+If the detector outruns the reader and frames go by unread, the gaps in `cnt0`
+show where, the header's `NSKIPPED` says how many, and the status bar warns you.
+Disconnecting before the count is reached cancels the save and writes nothing.
+A capture is limited to 1000 frames, since every one is held in memory until
+the file is written.
+
 (zoom)=
 ## Zoom
 
