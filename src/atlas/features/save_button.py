@@ -4,9 +4,6 @@ from PyQt5.QtCore import Qt
 
 from .registry import Tool, register
 
-# Every frame of a capture is held in memory until it is written.
-MAX_SAVE_FRAMES = 1000
-
 
 @register("save_button")
 class SaveButtonTool(Tool):
@@ -16,7 +13,10 @@ class SaveButtonTool(Tool):
 
     With shared memory on, a Frames box beside it sets how many frames each
     save takes: one saves the frame on screen, more saves that many frames
-    straight off the stream into a single cube.
+    straight off the stream into a single cube. Every one of those frames is
+    held in memory until written, so the box goes only as high as the free
+    memory allows for the segment's frame size. Until a segment is found that
+    size is unknown, and the box stays at 1.
     """
 
     def __init__(self, window, settings):
@@ -40,9 +40,10 @@ class SaveButtonTool(Tool):
         # Several frames can only come from a live stream.
         if self.window.config.tools.shm.enabled:
             self.count = QSpinBox()
-            self.count.setRange(1, MAX_SAVE_FRAMES)
-            self.count.setToolTip("How many frames each save takes. More than one "
-                                  "saves the next frames off the stream as one cube.")
+            self.count.setRange(1, 1)
+            # Thousands run long enough to want the separators.
+            self.count.setGroupSeparatorShown(True)
+            self.set_frame_limit(1, "Connect to shared memory to save several frames")
             self.toolbar.addWidget(QLabel(" Frames: "))
             self.toolbar.addWidget(self.count)
             # With a count on screen, Ctrl+S and the menu have to honour it as
@@ -51,6 +52,15 @@ class SaveButtonTool(Tool):
             self.window.save_action.triggered.connect(self.save)
 
         self.window.addToolBar(self.toolbar)
+
+    def set_frame_limit(self, limit, reason):
+        """Lets the Frames box go up to `limit`, saying why it stops there."""
+        # QSpinBox holds an int32; a machine with that much room for frames
+        # this small has no practical limit anyway.
+        self.count.setMaximum(min(limit, 2 ** 31 - 1))
+        self.count.setToolTip(
+            "How many frames each save takes. More than one saves the next frames "
+            f"off the stream as one cube.\n{reason}.")
 
     def save(self):
         """Saves as many frames as the Frames box says."""

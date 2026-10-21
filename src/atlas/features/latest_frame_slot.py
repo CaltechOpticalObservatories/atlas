@@ -20,6 +20,11 @@ class LatestFrameSlot:
         with self._lock:
             self._pending = value
 
+    def empty(self):
+        """True when nothing is pending: the consumer has taken the last value."""
+        with self._lock:
+            return self._pending is None
+
     def take(self):
         """Consumer side: the newest value, or None if nothing new arrived."""
         with self._lock:

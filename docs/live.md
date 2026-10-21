@@ -61,7 +61,7 @@ already set for the rest of the toolchain.
 
 A detector can produce frames faster than a GUI can draw them; 60 Hz arrival
 against a display that needs tens of milliseconds per frame is a losing race.
-atlas reads every frame on a background thread but only hands the **latest** one
+atlas follows the segment on a background thread but only hands the **latest** frame
 to the GUI, no more often than `display_fps_cap` (15 Hz by default). Frames in
 between are dropped rather than queued, so the display stays current instead of
 falling steadily further behind.
@@ -77,6 +77,36 @@ stream, it has its own, much lower, `update_hz`. That is deliberate: the median
 is expensive enough that recomputing it per displayed frame would compete with
 drawing the frame.
 :::
+
+### Keeping every frame: the capture process
+
+The display can drop frames, but a [multi-frame save](frames.md#saving-several-frames-at-once)
+must not, and its keywords have to be each frame's own. Neither waits long:
+
+- A segment holds keywords only for its newest frame. They are rewritten just
+  before the next frame is published, which at 1 kHz is under a millisecond
+  later.
+- The pixels last a little longer if the segment has a ring buffer (its
+  `CBsize`), which keeps the last few frames, but only `CBsize − 1` frame
+  periods. That is 3 ms at 1 kHz with a ring of 4.
+
+A reader sharing Python with the window cannot keep those deadlines: drawing
+holds the interpreter for milliseconds at a time. So when you connect, atlas
+also starts a **capture process** with an interpreter of its own. It waits
+idle until a multi-frame save starts. Then it watches the frame counter
+continuously, copying each frame's keywords and pixels the moment the frame
+is published. The frames go straight into shared memory that the window then
+writes to the file. A frame published while it was held up is caught up on
+from the ring if the ring still holds it, though without keywords of its own.
+
+Nothing about the segment or its producer needs changing. atlas checks the
+keywords it copied against ImageStreamIO's own per-keyword write counter. A
+copy taken after the next frame's keywords were already written is masked
+rather than attached to the wrong frame. Frames or keywords that were missed
+are always counted, in the file's `NSKIPPED` and `NKWMISS`, never hidden.
+
+The capture process spins on one CPU core while a save is under way, and only
+then.
 
 ### Installation notes
 

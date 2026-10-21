@@ -166,6 +166,7 @@ See [](live.md#zmq).
 | `segment_name` | string | `camera` | Non-empty; the `.im.shm` file's stem |
 | `shm_dir` | string | `""` | Empty falls back to `MILK_SHM_DIR`, `/milk/shm`, `/tmp` |
 | `display_fps_cap` | number | `15.0` | Positive; adjustable live from the menu |
+| `capture_memory_fraction` | number | `0.5` | Above 0, at most 0.9; share of free memory one multi-frame save may fill |
 
 See [](live.md#shared-memory).
 

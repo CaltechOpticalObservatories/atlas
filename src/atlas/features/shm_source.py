@@ -1,138 +1,105 @@
 # Standard Library Imports
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import os
 import threading
+import time
 
 # Third-Party Library Imports
 from astropy.io import fits
-from astropy.table import Table
-import numpy as np
+from astropy.table import MaskedColumn, Table
 from PyQt5.QtWidgets import QAction, QDialog, QLabel, QSlider, QVBoxLayout
 from PyQt5.QtCore import QObject, Qt, QTimer, pyqtSignal
 
-from atlas.model import saving
+from atlas.model import capture_budget, saving
 from .registry import Tool, register
 from .latest_frame_slot import LatestFrameSlot
 from . import shm_reader
+from .shm_capture import CANCELLED, Capture, CaptureProcess, frame_keywords
 
 _MIN_DISPLAY_HZ = 1
 _MAX_DISPLAY_HZ = 120
 _ATTACH_RETRY_SECONDS = 1.0
+# How long without a frame before checking the segment was not replaced
+_IDLE_CHECK_SECONDS = 0.2
+# How often the display reader looks at a ring for a new frame
+_RING_POLL_SECONDS = 0.001
 
 
-@dataclass
-class Capture:
-    """A request, made at `when`, to keep the next `count` frames read."""
-    count: int
-    when: datetime
-    frames: list = field(default_factory=list)
-
-
-def stack_frames(frames):
+def capture_table(numbers, keywords):
     """
-    Turns captured frames into one FITS cube, ready for saving.
+    The header and per-frame table to save a capture's cube with.
 
-    The header is the first frame's keywords. Every frame has its own, so they
-    also go in a table with one row per frame, alongside each frame's cnt0.
+    The header is the keywords of the first frame that has its own. Every
+    frame has its own values, so they also go in a table with one row per
+    frame, alongside each frame's cnt0. A frame saved without its keywords has
+    them masked in the table, never borrowed from a neighbour, and NKWMISS
+    counts such frames.
+
+    Args:
+        numbers (list): Each frame's cnt0, or None throughout when unknown.
+        keywords (list): Each frame's keywords, or None where it has none.
 
     Returns:
-        tuple: (cube, header, table, skipped). The cube is (nframes, height,
-        width); `table` is None when there is nothing per frame to record;
-        `skipped` counts frames the reader missed between the first and last,
-        going by cnt0, or is None when the frames carry no cnt0.
-
-    Raises:
-        ValueError: when the frames are not all one shape and type, as when
-        the segment was recreated at another size partway through.
+        tuple: (header, table, skipped, missing). `table` is None when there is
+        nothing per frame to record; `skipped` counts frames missed between the
+        first and last, going by cnt0, or is None when the frames carry no
+        cnt0; `missing` counts frames saved without keywords.
     """
-    first = frames[0]
-    if any(f.data.shape != first.data.shape or f.data.dtype != first.data.dtype
-           for f in frames):
-        raise ValueError("the frame size changed partway through")
-    cube = np.stack([f.data for f in frames])
-
-    header = fits.Header(first.keywords)
+    known = [frame for frame in keywords if frame is not None]
+    first = known[0] if known else {}
+    header = fits.Header(first)
     columns = {}
     skipped = None
-    counters = [f.cnt0 for f in frames]
-    if None not in counters:
-        skipped = sum(b - a - 1 for a, b in zip(counters, counters[1:]) if b > a + 1)
+    if None not in numbers:
+        skipped = sum(b - a - 1 for a, b in zip(numbers, numbers[1:]) if b > a + 1)
         header["NSKIPPED"] = (skipped, "frames missed between those saved")
-        columns["CNT0"] = counters
-    # Only keywords every frame has can make a full column.
-    for name in first.keywords:
-        if all(name in f.keywords for f in frames):
-            columns[name] = [f.keywords[name] for f in frames]
+        columns["CNT0"] = numbers
+
+    mask = [frame is None for frame in keywords]
+    missing = sum(mask)
+    if missing:
+        header["NKWMISS"] = (missing, "frames saved without their own keywords")
+    # Only keywords every frame that has any carries can make a full column.
+    for name in first:
+        if all(name in frame for frame in known):
+            # A masked row still needs a value of the column's type under it.
+            values = [first[name] if frame is None else frame[name] for frame in keywords]
+            columns[name] = MaskedColumn(values, mask=mask) if missing else values
 
     table = Table(columns) if columns else None
-    return cube, header, table, skipped
+    return header, table, skipped, missing
 
 
-class ShmReceiver(QObject):
+class ShmReceiver(QObject):  # pylint: disable=too-many-instance-attributes
     """
-    Reads frames from an ImageStreamIO segment on a background thread.
+    Follows an ImageStreamIO segment on a background thread, for the display.
+
+    Only the newest frame matters here, so the ones between are let go.
+    Keeping every frame is the capture worker's job (see shm_capture), in a
+    process of its own, where the GUI cannot hold it up.
     """
 
     attached = pyqtSignal(str)
     detached = pyqtSignal(str)
-    captured = pyqtSignal(object)  # a finished Capture
 
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
         self.thread = None
         self.slot = LatestFrameSlot()
+        # What the segment last attached to holds, and where it is; None before any
+        self.info = None
+        self.nbkw = 0
+        self.path = None
         self._stop = threading.Event()
         self._failure_reported = False
-        self._capture = None
-        self._capture_lock = threading.Lock()
+        # Reader thread only: the number of the newest frame read
+        self._last = None
 
     @property
     def running(self):
         """True while the reader thread is up, attached or still trying."""
         return self.thread is not None and self.thread.is_alive()
-
-    def capture(self, count, when):
-        """
-        Asks the reader thread to keep the next `count` frames it reads.
-
-        Kept on the reader thread rather than from the display, which only
-        sees the frames the display rate lets through: these are every frame
-        the reader gets. `captured` is emitted with the Capture once full.
-
-        Returns:
-            bool: False if a capture is already under way.
-        """
-        with self._capture_lock:
-            if self._capture is not None:
-                return False
-            self._capture = Capture(count, when)
-            return True
-
-    def cancel_capture(self):
-        """Abandons any capture under way, returning it, or None if there was none."""
-        with self._capture_lock:
-            capture, self._capture = self._capture, None
-        return capture
-
-    def capture_progress(self):
-        """(frames kept, frames asked for) for a capture under way, or None."""
-        with self._capture_lock:
-            if self._capture is None:
-                return None
-            return len(self._capture.frames), self._capture.count
-
-    def collect(self, frame):
-        """Reader thread: adds a frame to any capture under way."""
-        with self._capture_lock:
-            capture = self._capture
-            if capture is None:
-                return
-            capture.frames.append(frame)
-            if len(capture.frames) < capture.count:
-                return
-            self._capture = None
-        self.captured.emit(capture)
 
     def start(self):
         """
@@ -160,10 +127,9 @@ class ShmReceiver(QObject):
         self.slot.take()  # drop any leftover frame, so a reconnect starts clean
 
     def receive(self):
-        """
-        Thread body: wait for new frames and forward them at a bounded rate.
-        """
+        """Thread body: keep the newest frame waiting for the display."""
         image = None
+        idle_since = time.monotonic()
         try:
             while not self._stop.is_set():
                 if image is None:
@@ -174,24 +140,58 @@ class ShmReceiver(QObject):
                     continue
 
                 try:
-                    # 0.2s timeout so the loop still notices _stop being set
-                    frame = shm_reader.wait_for_frame(image, timeout=0.2)
+                    if self.info.ring:
+                        arrived = self.read_from_ring(image)
+                    else:
+                        arrived = self.read_live(image)
                 except Exception as error:  # pragma: no cover - segment read failure path
                     self.detach(image, str(error))
                     image = None
                     continue
 
-                if frame is None:
+                now = time.monotonic()
+                if arrived:
+                    idle_since = now
+                    continue
+                if now - idle_since >= _IDLE_CHECK_SECONDS:
+                    idle_since = now
                     if shm_reader.segment_replaced(image):
                         self.detach(image, "segment was replaced, re-attaching")
                         image = None
-                    continue
-
-                self.slot.put(frame)
-                self.collect(frame)
+                        continue
+                if self.info.ring:
+                    time.sleep(_RING_POLL_SECONDS)
         finally:
             if image is not None:
                 shm_reader.close(image)
+
+    def read_from_ring(self, image):
+        """
+        Notes the newest frame in the ring, and copies it if the display has
+        taken the last one. True if there was a new one.
+        """
+        newest = shm_reader.frame_count(image)
+        if newest == self._last:
+            return False
+        # Copied only when the display has taken the last one: at kHz rates
+        # copying every frame for a 15 Hz display is most of the work. The
+        # frame shown can then be up to one display tick old.
+        if self.slot.empty():
+            keywords = shm_reader.read_keywords(image)
+            data = shm_reader.read_ring(image, newest)
+            if data is not None:
+                self.slot.put(shm_reader.ShmFrame(data=data, keywords=keywords, cnt0=newest))
+        self._last = newest
+        return True
+
+    def read_live(self, image):
+        """Waits for the live frame to move on, and reads it. True if it did."""
+        frame = shm_reader.wait_for_frame(image, timeout=_IDLE_CHECK_SECONDS, after=self._last)
+        if frame is None:
+            return False
+        self._last = frame.cnt0
+        self.slot.put(frame)
+        return True
 
     def attach(self):
         """Attaches to the configured segment, or returns None and says why."""
@@ -206,7 +206,11 @@ class ShmReceiver(QObject):
             return None
 
         self._failure_reported = False
-        self.attached.emit(shm_reader.segment_path(image))
+        self._last = None
+        self.info = shm_reader.segment_info(image)
+        self.nbkw = shm_reader.keyword_count(image)
+        self.path = shm_reader.segment_path(image)
+        self.attached.emit(self.path)
         return image
 
     def detach(self, image, reason):
@@ -216,8 +220,56 @@ class ShmReceiver(QObject):
         self.detached.emit(reason)
 
 
+class CaptureWriter(QObject):
+    """
+    Writes a finished capture out on a thread of its own, so a cube of
+    gigabytes does not freeze the window while it goes to disk.
+
+    One at a time: a new capture waits for the last write, so no more than one
+    cube is ever in memory.
+    """
+
+    # file name, frames skipped, frames without keywords, written
+    finished = pyqtSignal(str, object, int, bool)
+
+    def __init__(self, view_model):
+        super().__init__()
+        self.view_model = view_model
+        self.thread = None
+        # The file being written, or None
+        self.file_name = None
+
+    @property
+    def busy(self):
+        """True while a capture is being written."""
+        return self.file_name is not None
+
+    def write(self, file_name, capture):
+        """Starts writing a capture, giving its memory back after; `finished` says how it went."""
+        self.file_name = file_name
+        self.thread = threading.Thread(target=self.run, args=(file_name, capture), daemon=True)
+        self.thread.start()
+
+    def run(self, file_name, capture):
+        """Writer thread: the save itself reports to the status bar."""
+        try:
+            numbers = capture.counters[:, 0].tolist()
+            header, table, skipped, missing = capture_table(numbers, frame_keywords(capture))
+            written = self.view_model.save_image(file_name, capture.cube, header, table)
+        finally:
+            capture.release()
+            self.file_name = None
+        self.finished.emit(file_name, skipped, missing, written)
+
+    def wait(self):
+        """Blocks until any write under way is done, so quitting loses nothing."""
+        if self.thread is not None:
+            self.thread.join()
+            self.thread = None
+
+
 @register("shm")
-class ShmTool(Tool):
+class ShmTool(Tool):  # pylint: disable=too-many-instance-attributes
     """
     Live-displays frames arriving on an ImageStreamIO shared-memory segment.
 
@@ -230,6 +282,10 @@ class ShmTool(Tool):
     def __init__(self, window, settings):
         super().__init__(window, settings)
         self.receiver = None
+        self.writer = None
+        # The capture worker while connected, and the capture it is filling
+        self.capturer = None
+        self.pending = None
         self.timer = None
         self.status = None
         self.status_text = ""
@@ -240,7 +296,8 @@ class ShmTool(Tool):
         self.receiver = ShmReceiver(self.settings)
         self.receiver.attached.connect(self.on_attached)
         self.receiver.detached.connect(self.on_detached)
-        self.receiver.captured.connect(self.on_captured)
+        self.writer = CaptureWriter(self.view_model)
+        self.writer.finished.connect(self.on_written)
 
         self.timer = QTimer(self.window)
         self.timer.setInterval(self.interval_ms(self.settings.display_fps_cap))
@@ -273,12 +330,21 @@ class ShmTool(Tool):
         self.status_text = text
         self.show_capture_progress()
 
+    def capture_progress(self):
+        """(frames kept, frames asked for) for a capture under way, or None."""
+        if self.pending is None:
+            return None
+        return self.capturer.progress.value, self.pending.count
+
     def show_capture_progress(self):
         """Shows how far a capture has got, on the GUI thread at timer pace."""
-        progress = self.receiver.capture_progress()
+        progress = self.capture_progress()
+        writing = self.writer.file_name
         text = self.status_text
         if progress is not None:
             text = f"{text} — saving frame {progress[0]} of {progress[1]}"
+        elif writing is not None:
+            text = f"{text} — writing {os.path.basename(writing)}…"
         if self.status.text() != text:
             self.status.setText(text)
 
@@ -293,31 +359,66 @@ class ShmTool(Tool):
             self.window.show_message("Already connected.")
             return
 
+        # Started now, so it has settled in long before anyone presses Save.
+        self.capturer = CaptureProcess()
+        self.capturer.ended.connect(self.on_capture_ended)
         self.timer.start()
         self.connect_action.setEnabled(False)
         self.disconnect_action.setEnabled(True)
         self.set_status(f"SHM: connecting to {self.settings.segment_name}…")
 
+    def stop_capturer(self):
+        """Ends the capture worker, and gives back the memory of any capture it had."""
+        if self.capturer is not None:
+            self.capturer.stop()
+            self.capturer = None
+        if self.pending is not None:
+            self.pending.release()
+            self.pending = None
+
     def disconnect_from_shm(self):
         """Stops reading, abandoning any capture that has not finished."""
+        progress = self.capture_progress()
         self.timer.stop()
         self.receiver.stop()
-        capture = self.receiver.cancel_capture()
+        self.stop_capturer()
         self.connect_action.setEnabled(True)
         self.disconnect_action.setEnabled(False)
         self.set_status("SHM: disconnected")
-        if capture is None:
+        if progress is None:
             self.window.show_message("Disconnected from SHM.")
         else:
             self.window.show_message(
-                f"Disconnected from SHM. Saving {capture.count} frames was cancelled "
-                f"after {len(capture.frames)}; nothing was written.")
+                f"Disconnected from SHM. Saving {progress[1]} frames was cancelled "
+                f"after {progress[0]}; nothing was written.")
 
     def shutdown(self):
-        """Stops the reader thread so the app can actually exit."""
+        """Stops the reader thread and worker so the app can actually exit."""
         self.timer.stop()
         self.receiver.stop()
-        self.receiver.cancel_capture()
+        self.stop_capturer()
+        # A capture already in has been paid for; quitting must not cut it short.
+        self.writer.wait()
+
+    def capture_limit(self):
+        """The most frames of the attached segment a capture can hold now."""
+        return capture_budget.max_capture_frames(
+            capture_budget.capture_bytes_per_frame(self.receiver.info.frame_bytes,
+                                                   self.receiver.nbkw),
+            self.settings.capture_memory_fraction)
+
+    def offer_capture_limit(self, limit):
+        """Caps the save button's Frames box at what fits in memory, if it has one."""
+        button = self.window.tools.get("save_button")
+        if button is None:
+            return
+        info = self.receiver.info
+        height, width = info.shape
+        free_gb = capture_budget.available_bytes() / 2 ** 30
+        button.set_frame_limit(limit, (
+            f"Up to {limit:,} frames of {width}×{height} {info.dtype.name} "
+            f"({info.frame_bytes / 2 ** 20:.2f} MB each): "
+            f"{self.settings.capture_memory_fraction:.0%} of the {free_gb:.1f} GB free"))
 
     def save_next_frames(self, count):
         """
@@ -328,39 +429,80 @@ class ShmTool(Tool):
         if not self.receiver.running:
             self.window.show_message("Connect to shared memory to save several frames.")
             return
+        info = self.receiver.info
+        if info is None:
+            self.window.show_message(
+                f"Still looking for {self.settings.segment_name}; "
+                f"several frames can be saved once it is found.")
+            return
+        if self.pending is not None or self.writer.busy:
+            self.window.show_message("Already saving frames; wait for that to finish.")
+            return
+
+        # Checked again now: the memory free when the segment was found may
+        # since have gone to something else.
+        limit = self.capture_limit()
+        self.offer_capture_limit(limit)
+        if count > limit:
+            self.window.show_message(
+                f"Only {limit:,} frames fit in memory now; save {limit:,} or fewer.")
+            return
 
         when = datetime.now(timezone.utc)
         try:
             # Checked now rather than once the frames are in, so a directory
             # that cannot be made does not cost a whole capture.
             saving.day_directory(self.window.save_directory, when)
+            capture = Capture.allocate(count, when, info, self.receiver.nbkw,
+                                       self.receiver.path)
         except OSError as error:
             self.window.show_message(f"Could not save: {error}")
             return
 
-        if not self.receiver.capture(count, when):
-            self.window.show_message("Already saving frames; wait for that to finish.")
-            return
+        self.pending = capture
+        self.capturer.start(capture)
         self.show_capture_progress()
 
-    def on_captured(self, capture):
-        """A capture is full: writes it out. Runs on the GUI thread."""
+    def on_capture_ended(self, capture, kept, error):
+        """The worker has filled a capture, or given up on it. Runs on the GUI thread."""
+        if capture is not self.pending:
+            return  # disconnected meanwhile, and already given back
+        self.pending = None
+        capture.kept = kept
+        if error is None:
+            try:
+                file_name = saving.next_save_path(self.window.save_directory, capture.when)
+            except OSError as path_error:
+                error = str(path_error)
+            else:
+                self.writer.write(file_name, capture)
+        if error is not None:
+            capture.release()
+            if error != CANCELLED:
+                self.window.show_message(f"Could not save {capture.count} frames: {error}")
         self.show_capture_progress()
-        try:
-            cube, header, table, skipped = stack_frames(capture.frames)
-            file_name = saving.next_save_path(self.window.save_directory, capture.when)
-        except (ValueError, OSError) as error:
-            self.window.show_message(f"Could not save {capture.count} frames: {error}")
-            return
 
-        if self.view_model.save_image(file_name, cube, header, table) and skipped:
+    def on_written(self, file_name, skipped, missing, written):
+        """A capture is on disk, or failed to be. Runs on the GUI thread."""
+        self.show_capture_progress()
+        if not written:
+            return
+        if skipped and missing:
+            self.window.show_message(
+                f"Saved {file_name}, but {skipped} frames arrived too fast to keep, and "
+                f"{missing} of those saved have no keywords of their own.")
+        elif skipped:
             self.window.show_message(
                 f"Saved {file_name}, but {skipped} frames arrived too fast to keep "
                 f"and are missing from it.")
+        elif missing:
+            self.window.show_message(
+                f"Saved {file_name}, but {missing} frames in it have no keywords of their own.")
 
     def on_attached(self, path):
         """The reader thread is on a live segment now. Runs on the GUI thread."""
         self.set_status(f"SHM: reading {self.settings.segment_name}")
+        self.offer_capture_limit(self.capture_limit())
         self.window.show_message(f"Reading {path}")
 
     def on_detached(self, reason):

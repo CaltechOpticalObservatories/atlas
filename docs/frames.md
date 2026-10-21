@@ -90,11 +90,13 @@ a save takes the **next** 50 frames off the stream and writes them to one file,
 a cube of shape (50, height, width). The menu command and
 <kbd>Ctrl</kbd>+<kbd>S</kbd> follow the box too.
 
-The frames are kept by the background reader, not taken from the display, so
-they are consecutive frames from the detector even when the
-[display rate](live.md#the-display-rate-cap) is far below the frame rate. The
-status bar counts them in (`saving frame 12 of 50`), and the file is named for
-the moment you pressed Save.
+The frames are kept by a [capture process](live.md#keeping-every-frame-the-capture-process)
+of atlas's own, not taken from the display, so they are consecutive frames
+from the detector even when the [display rate](live.md#the-display-rate-cap) is
+far below the frame rate. The status bar counts them in (`saving frame 12 of 50`), and the file is named for
+the moment you pressed Save. Once all the frames are in, the file is written in
+the background (`writing 20261012_190637.fits…`), so the window stays usable
+however large the cube; the next multi-frame save waits until it is done.
 
 The cube's header is the first frame's keywords. Each frame's own keywords,
 and its `cnt0` frame counter from the segment, go in a table extension named
@@ -107,11 +109,38 @@ cube = fits.getdata("20261012_190637.fits")              # (50, height, width)
 frames = fits.getdata("20261012_190637.fits", "FRAMES")  # one row per plane
 ```
 
-If the detector outruns the reader and frames go by unread, the gaps in `cnt0`
+Every row's keywords are the ones that frame was published with, so `FRAMENO`
+and friends can be relied on for timing. A segment holds keywords only for its
+newest frame, so the capture process copies them the moment each frame
+appears. When it could not, because it was held up past the next frame, the
+row's keyword values are masked: they read back as blank or `None`, never a
+neighbour's. The header's `NKWMISS` counts such frames, and the status bar
+says so. Each frame's pixels and `cnt0` are always its own.
+
+If the detector outruns the capture and frames go by unread, the gaps in `cnt0`
 show where, the header's `NSKIPPED` says how many, and the status bar warns you.
 Disconnecting before the count is reached cancels the save and writes nothing.
-A capture is limited to 1000 frames, since every one is held in memory until
-the file is written.
+
+#### How many frames fit
+
+Every frame of a save is held in memory until the file is written, so the
+Frames box goes only as high as fits in memory. The limit is worked out from
+the segment's frame size when atlas connects, so the box stays at 1 until then.
+Hover over the box to see the limit and how it was worked out.
+
+```text
+limit = (free memory × capture_memory_fraction − 64 MB) ÷ bytes per frame
+```
+
+`capture_memory_fraction` is 0.5 unless the
+[configuration](configuration.md#toolsshm) says otherwise, and the 64 MB is
+what writing the cube out needs on top of it. Each frame costs its pixels plus
+a copy of the segment's keywords, 128 bytes for each keyword. A 256×256 `uint16`
+frame is 128 KB, so 16 GB free allows about 65,000 frames. On Linux the frames
+are held in `/dev/shm`, so the limit is also kept within
+`capture_memory_fraction` of the space free there. Free memory is checked
+again when you press Save. If it has dropped below what the count needs, the
+save is refused with the new limit rather than started.
 
 (zoom)=
 ## Zoom
