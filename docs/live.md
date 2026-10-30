@@ -37,6 +37,8 @@ Once enabled, the tool adds a **Tools → Shared Memory** submenu:
 
 - **Connect to *segment*** starts reading.
 - **Disconnect from SHM** stops.
+- **Set Segment Directory…** picks the directory the segment is looked for in,
+  for this session. It is greyed out while connected; disconnect first.
 - **Set display rate…** opens a slider, 1 to 120 Hz.
 
 To keep the image currently on screen, use **File → Save Frame**
@@ -49,7 +51,7 @@ several consecutive frames into one cube.
 atlas opens `<shm_dir>/<segment_name>.im.shm`, resolving the directory the way
 ImageStreamIO itself does. It takes the first of these that exists:
 
-1. The `shm_dir` you configured
+1. The `shm_dir` you configured, or picked with **Set Segment Directory…**
 2. The `MILK_SHM_DIR` environment variable
 3. `/milk/shm`
 4. `/tmp`

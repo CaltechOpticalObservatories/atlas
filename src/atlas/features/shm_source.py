@@ -7,7 +7,7 @@ import time
 # Third-Party Library Imports
 from astropy.io import fits
 from astropy.table import MaskedColumn, Table
-from PyQt5.QtWidgets import QAction, QDialog, QLabel, QSlider, QVBoxLayout
+from PyQt5.QtWidgets import QAction, QDialog, QFileDialog, QLabel, QSlider, QVBoxLayout
 from PyQt5.QtCore import QObject, Qt, QTimer, pyqtSignal
 
 from atlas.model import capture_budget, saving
@@ -291,6 +291,7 @@ class ShmTool(Tool):  # pylint: disable=too-many-instance-attributes
         self.status_text = ""
         self.connect_action = None
         self.disconnect_action = None
+        self.directory_action = None
 
     def build(self):
         self.receiver = ShmReceiver(self.settings)
@@ -320,6 +321,10 @@ class ShmTool(Tool):  # pylint: disable=too-many-instance-attributes
         self.disconnect_action.triggered.connect(self.disconnect_from_shm)
         self.disconnect_action.setEnabled(False)
         menu.addAction(self.disconnect_action)
+
+        self.directory_action = QAction("Set Segment Directory…", self.window)
+        self.directory_action.triggered.connect(self.choose_shm_directory)
+        menu.addAction(self.directory_action)
 
         rate_action = QAction("Set display rate…", self.window)
         rate_action.triggered.connect(self.set_display_rate)
@@ -365,7 +370,22 @@ class ShmTool(Tool):  # pylint: disable=too-many-instance-attributes
         self.timer.start()
         self.connect_action.setEnabled(False)
         self.disconnect_action.setEnabled(True)
+        self.directory_action.setEnabled(False)
         self.set_status(f"SHM: connecting to {self.settings.segment_name}…")
+
+    def choose_shm_directory(self):
+        """
+        Picks the directory the segment is looked for in, for this session.
+
+        Only while disconnected: the reader settles on a directory when it
+        attaches, so changing it under a live connection would do nothing.
+        """
+        directory = QFileDialog.getExistingDirectory(
+            self.window, "Segment Directory", self.settings.shm_dir)
+        if directory:
+            self.settings.shm_dir = directory
+            self.window.show_message(
+                f"Looking for {self.settings.segment_name} in {directory}")
 
     def stop_capturer(self):
         """Ends the capture worker, and gives back the memory of any capture it had."""
@@ -384,6 +404,7 @@ class ShmTool(Tool):  # pylint: disable=too-many-instance-attributes
         self.stop_capturer()
         self.connect_action.setEnabled(True)
         self.disconnect_action.setEnabled(False)
+        self.directory_action.setEnabled(True)
         self.set_status("SHM: disconnected")
         if progress is None:
             self.window.show_message("Disconnected from SHM.")
