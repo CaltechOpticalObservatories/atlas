@@ -28,6 +28,7 @@ dependencies = [
     "astropy",
     "matplotlib",
     "numpy",
+    "psutil",
     "PyQt5",
     "pyyaml",
 ]

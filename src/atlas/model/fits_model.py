@@ -8,6 +8,28 @@ SCALES = ("linear", "log")
 # [0, 1]; `a` decides how much of the display range the faint end gets, and
 LOG_SOFTENING = 1000.0
 
+# A cube is converted and written this much at a time. Converting a block
+# takes one copy and byte-swapping it another, so writing a cube needs this
+# much memory beyond the cube itself.
+_CUBE_CHUNK_BYTES = 32 * 2 ** 20
+CUBE_WRITE_OVERHEAD_BYTES = 2 * _CUBE_CHUNK_BYTES
+
+
+def _as_stored(data):
+    """
+    Data as FITS stores it: unsigned integers wider than a byte, and signed
+    bytes, are offset by BZERO into the other signedness.
+
+    Subtracting 2**(bits-1) and flipping the top bit are the same thing, and
+    the flip cannot overflow.
+    """
+    size = data.dtype.itemsize
+    if data.dtype.kind == "u" and size > 1:
+        return (data ^ np.array(1 << (8 * size - 1), data.dtype)).view(f"i{size}")
+    if data.dtype == np.int8:
+        return (data ^ np.int8(-128)).view(np.uint8)
+    return data
+
 
 class FITSModel:
     def load_fits_image(self, file_name):
@@ -47,7 +69,8 @@ class FITSModel:
 
         A cube of several frames is stored as (nframes, height, width), the
         FITS convention, and `frame_table` can carry one row per frame in a
-        binary table extension named FRAMES.
+        binary table extension named FRAMES. Unless gzipped, a cube is written
+        a block of frames at a time, so it never needs a second copy in memory.
 
         Args:
             file_name (str): The path to write. An existing file is never
@@ -56,14 +79,44 @@ class FITSModel:
             header (astropy.io.fits.Header): Header cards to keep, or None.
             frame_table (astropy.table.Table): Per-frame values, or None.
         """
-        hdus = fits.HDUList([fits.PrimaryHDU(image_data, header=header)])
+        table_hdu = None
         if frame_table is not None:
             table_hdu = fits.table_to_hdu(frame_table)
             table_hdu.name = "FRAMES"
+
+        if image_data.ndim == 3 and not file_name.endswith(".gz"):
+            self._stream_cube(file_name, image_data, header)
+            if table_hdu is not None:
+                with fits.open(file_name, mode="append", output_verify="silentfix") as hdus:
+                    hdus.append(table_hdu)
+            return
+
+        hdus = fits.HDUList([fits.PrimaryHDU(image_data, header=header)])
+        if table_hdu is not None:
             hdus.append(table_hdu)
         # Shared-memory keywords are free-form, and a card astropy can repair
         # (a lowercase name, say) must not stop the pixels being saved.
         hdus.writeto(file_name, overwrite=False, output_verify="silentfix")
+
+    @staticmethod
+    def _stream_cube(file_name, cube, header):
+        """
+        Writes a cube as the primary HDU a block of frames at a time.
+        """
+        # astropy works out BITPIX and BZERO for the type from one frame,
+        # without copying it, and the header only has to be told how many.
+        cube_header = fits.PrimaryHDU(cube[:1], header=header).header
+        cube_header["NAXIS3"] = len(cube)
+        # Made here first: StreamingHDU appends to whatever file it finds.
+        with open(file_name, "xb"):
+            pass
+        stream = fits.StreamingHDU(file_name, cube_header)
+        try:
+            step = max(1, _CUBE_CHUNK_BYTES // max(1, cube[0].nbytes))
+            for start in range(0, len(cube), step):
+                stream.write(_as_stored(cube[start:start + step]))
+        finally:
+            stream.close()
 
     def normalize_image(self, image_data, scale="linear"):
         """

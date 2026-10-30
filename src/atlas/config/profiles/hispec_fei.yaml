@@ -18,6 +18,9 @@ tools:
     # since that fallback will happily find a stale segment.
     shm_dir: ""
     display_fps_cap: 15.0
+    # Share of the memory free at the time that a multi-frame save may fill;
+    # the Frames box stops at however many frames that holds
+    capture_memory_fraction: 0.5
   # Frame and region statistics: Shift+drag a box to summarise it
   statistics:
     enabled: true

@@ -114,6 +114,8 @@ class ShmConfig:
     segment_name: str = "camera"
     shm_dir: str = ""
     display_fps_cap: float = 15.0
+    # Share of the memory free when saving that one multi-frame save may fill
+    capture_memory_fraction: float = 0.5
 
     def validate(self, path):
         if not isinstance(self.segment_name, str) or not self.segment_name:
@@ -124,6 +126,13 @@ class ShmConfig:
         if not isinstance(self.display_fps_cap, (int, float)) or self.display_fps_cap <= 0:
             raise ConfigError(
                 f"{path}.display_fps_cap must be a positive number, got {self.display_fps_cap!r}")
+        fraction = self.capture_memory_fraction
+        # Not all of it: the display, the OS and everything else still need some.
+        if (isinstance(fraction, bool) or not isinstance(fraction, (int, float))
+                or not 0 < fraction <= 0.9):
+            raise ConfigError(
+                f"{path}.capture_memory_fraction must be a number above 0 and at "
+                f"most 0.9, got {fraction!r}")
 
 
 @dataclass

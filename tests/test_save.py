@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 # Third-Party Library Imports
 from astropy.io import fits
+from astropy.table import Table
 import numpy as np
 import pytest
 
@@ -23,7 +24,8 @@ from PyQt5.QtWidgets import QFileDialog, QToolBar
 from atlas.config.loader import load_config
 from atlas.config.schema import AtlasConfig, ConfigError, SaveConfig, ToolsConfig
 from atlas.main import overrides_from_args, parse_args
-from atlas.model import saving
+from atlas.model import fits_model, saving
+from atlas.model.fits_model import FITSModel
 
 COUNTS = (np.arange(64, dtype=np.uint16) + 60000).reshape(8, 8)
 WHEN = datetime(2026, 10, 12, 19, 6, 37, tzinfo=timezone.utc)
@@ -130,6 +132,44 @@ def test_existing_file_is_never_replaced(window, save_root):
     target.write_bytes(b"precious")
 
     assert not view_model.save_frame(view_model.current_frame, str(target))
+    assert target.read_bytes() == b"precious"
+
+
+@pytest.mark.parametrize("dtype", [np.uint16, np.uint32, np.int8, np.int16, np.float32])
+def test_a_cube_written_in_blocks_round_trips_exactly(tmp_path, monkeypatch, dtype):
+    """
+    A cube goes out a few frames at a time, so it never needs a second copy in
+    memory; the unsigned types FITS stores offset by BZERO must still come
+    back exactly as they went out, whichever block a frame landed in.
+    """
+    rng = np.random.default_rng(1)
+    limits = np.iinfo(dtype) if np.dtype(dtype).kind in "iu" else None
+    if limits is None:
+        cube = rng.standard_normal((7, 8, 8)).astype(dtype)
+    else:
+        cube = rng.integers(limits.min, limits.max, (7, 8, 8), dtype=dtype, endpoint=True)
+    # Three frames a block, so the seven frames take three uneven blocks.
+    monkeypatch.setattr(fits_model, "_CUBE_CHUNK_BYTES", cube[0].nbytes * 3)
+    target = tmp_path / "cube.fits"
+
+    FITSModel().save_fits_image(str(target), cube, fits.Header({"FRAMENO": 4}),
+                                Table({"CNT0": np.arange(7)}))
+
+    saved, header = fits.getdata(target, header=True)
+    # Big-endian, as FITS stores it, for the types it stores natively
+    assert saved.dtype.newbyteorder("=") == np.dtype(dtype)
+    assert np.array_equal(saved, cube)
+    assert header["FRAMENO"] == 4
+    assert list(fits.getdata(target, "FRAMES")["CNT0"]) == list(range(7))
+
+
+def test_a_cube_never_replaces_a_file_either(tmp_path):
+    """Writing in blocks appends to a file, so it has to make its own first."""
+    target = tmp_path / "taken.fits"
+    target.write_bytes(b"precious")
+
+    with pytest.raises(OSError):
+        FITSModel().save_fits_image(str(target), np.zeros((2, 4, 4), np.uint16))
     assert target.read_bytes() == b"precious"
 
 
