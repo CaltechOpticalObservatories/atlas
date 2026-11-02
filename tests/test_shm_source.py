@@ -26,7 +26,7 @@ from types import SimpleNamespace
 # Third-Party Library Imports
 import numpy as np
 import pytest
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QFileDialog
 
 from astropy.io import fits
 
@@ -960,3 +960,38 @@ def test_a_new_save_waits_for_the_last_write(live_window, monkeypatch):
     assert window.statusBar().currentMessage() == \
         "Already saving frames; wait for that to finish."
     assert shm.capture_progress() is None
+
+
+def test_segment_directory_can_be_changed_from_the_menu(live_window, tmp_path, monkeypatch):
+    """Tools → Shared Memory → Set Segment Directory… is where Connect looks next."""
+    _, _, shm, _ = live_window
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    shm.settings.shm_dir = str(empty)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_: str(tmp_path / "shm"))
+
+    shm.directory_action.trigger()
+    shm.connect_to_shm()
+
+    assert wait_until(lambda: shm.receiver.info is not None)
+    assert shm.receiver.path == str(tmp_path / "shm" / f"{SEGMENT}.im.shm")
+
+
+def test_cancelling_the_segment_directory_picker_keeps_it(live_window, tmp_path, monkeypatch):
+    """An empty answer from the picker means the user backed out."""
+    _, _, shm, _ = live_window
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_: "")
+
+    shm.directory_action.trigger()
+
+    assert shm.settings.shm_dir == str(tmp_path / "shm")
+
+
+def test_segment_directory_is_fixed_while_connected(live_window):
+    """The reader has already settled on a directory, so the menu says so."""
+    _, _, shm, _ = live_window
+
+    shm.connect_to_shm()
+    assert not shm.directory_action.isEnabled()
+    shm.disconnect_from_shm()
+    assert shm.directory_action.isEnabled()
