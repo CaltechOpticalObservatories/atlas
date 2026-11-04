@@ -177,7 +177,7 @@ See [](live.md#shared-memory).
 | `minimal` | Image display only: no panels, no tools |
 | `viewer` | General FITS viewing: headers and histograms |
 | `detector` | COO detector work: tiled frames, tap subtraction, ZMQ, statistics |
-| `hispec_fei` | HISPEC FEI tracking camera: live shared memory, statistics, a Save Frame button |
+| `hispec_fei` | HISPEC FEI tracking camera: live shared memory from `/dev/shm`, statistics, a Save Frame button |
 
 `atlas --list-profiles` prints them. The YAML lives in
 `src/atlas/config/profiles/`, which is a good place to look when writing your

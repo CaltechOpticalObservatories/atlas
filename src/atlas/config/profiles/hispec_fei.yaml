@@ -13,10 +13,9 @@ tools:
   shm:
     enabled: true
     segment_name: hispec_tracking_camera
-    # Empty lets ImageStreamIO's own chain resolve the directory: MILK_SHM_DIR,
-    # then /milk/shm, then /tmp. Set it here to pin which file gets opened,
-    # since that fallback will happily find a stale segment.
-    shm_dir: ""
+    # Where the hsfei_atcam daemon writes; the MILK_SHM_DIR, /milk/shm, /tmp
+    # fallback would find nothing there, or a stale segment
+    shm_dir: /dev/shm
     display_fps_cap: 15.0
     # Share of the memory free at the time that a multi-frame save may fill;
     # the Frames box stops at however many frames that holds
